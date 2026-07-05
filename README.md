@@ -1,3 +1,5 @@
+![loadout](assets/banner.png)
+
 # loadout — CLAUDE.md 구성 백화점
 
 작업 폴더 성격에 맞는 CLAUDE.md 구성을 카탈로그에서 **골라 담는** 조합형 설치기.
