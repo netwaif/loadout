@@ -66,7 +66,7 @@ def install_fragment(target: Path, name: str, dry: bool) -> str:
     instr = target / INSTRUCTION_FILE
     text = instr.read_text(encoding="utf-8") if instr.is_file() else ""
     if start in text and end in text:
-        new = re.sub(re.escape(start) + r".*?" + re.escape(end), block, text, count=1, flags=re.S)
+        new = re.sub(re.escape(start) + r".*?" + re.escape(end), lambda m: block, text, count=1, flags=re.S)  # 치환문자열 backslash escape 해석 방지 — 조각 본문에 \g·\\ 있어도 byte-exact
         action = "교체"
     else:
         new = (text.rstrip("\n") + "\n\n" if text else "") + block + "\n"

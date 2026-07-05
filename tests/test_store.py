@@ -90,11 +90,34 @@ def install_checks() -> int:
     return fails
 
 
+def resub_escape_checks() -> int:
+    """재설치(교체 경로)에서 조각 본문의 backslash escape(\\g, \\\\)가 byte-exact로 보존되는지."""
+    fails = 0
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("store", STORE)
+    store = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(store)
+    with tempfile.TemporaryDirectory() as d:
+        frag_root = Path(d) / "fragments"
+        (frag_root / "esc").mkdir(parents=True)
+        body = "## esc\n\n정규식 예시: `\\g<0>` 와 백슬래시 \\\\ 두 개.\n"
+        (frag_root / "esc" / "fragment.md").write_text(body, encoding="utf-8")
+        store.FRAGMENTS_DIR = frag_root
+        tgt = Path(d) / "t"
+        store.install_fragment(tgt, "esc", dry=False)   # append 경로
+        store.install_fragment(tgt, "esc", dry=False)   # 교체 경로(위험 지점)
+        text = (tgt / "CLAUDE.md").read_text(encoding="utf-8")
+        ok = body.strip("\n") in text and text.count("<!-- store:esc:start -->") == 1
+        print(f"  {'PASS' if ok else 'FAIL'} 교체 경로 backslash byte-exact"); fails += 0 if ok else 1
+    return fails
+
+
 def main() -> None:
     fails = catalog_checks()
     fails += karpathy_fragment_checks()
     fails += fragment_content_checks()
     fails += install_checks()
+    fails += resub_escape_checks()
     print("전부 PASS" if fails == 0 else f"{fails}개 FAIL")
     sys.exit(1 if fails else 0)
 
