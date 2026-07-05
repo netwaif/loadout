@@ -1,0 +1,3 @@
+{"label": "에이전트 루프", "corner": "자율성",
+ "desc": "완료조건 기반 자율 반복 — 채점표 검수·이터레이션 캡·예외 시 사람 호출",
+ "available": true, "scaffold": false, "note": "goal-prompt·채점표 템플릿 딸림"}

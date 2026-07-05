@@ -1,0 +1,3 @@
+{"label": "멀티에이전트", "corner": "실행 구조",
+ "desc": "오케스트레이터 + 워커 풀 (file-as-memory 오케스트레이션 시스템 전체 스캐폴드)",
+ "available": true, "scaffold": true, "note": "configure-multiagent init.py에 위임"}

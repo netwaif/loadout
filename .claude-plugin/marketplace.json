@@ -1,0 +1,19 @@
+{
+  "name": "loadout",
+  "description": "CLAUDE.md 구성 백화점 — 작업 폴더 성격에 맞는 구성 조각(카파시 4원칙·Fable5 단독·멀티에이전트·에이전트 루프)을 골라 담아 설치",
+  "owner": {
+    "name": "netwaif",
+    "email": "netwaif@users.noreply.github.com"
+  },
+  "plugins": [
+    {
+      "name": "loadout",
+      "description": "\"CLAUDE.md 구성 골라 담아줘\"로 조합형 구성 카탈로그를 제시하고 결정적 설치기(마커 멱등 append·코너 배타)로 대상 폴더에 설치. 새 구성 추가 = 조각 폴더 하나(입점 양식 포함).",
+      "version": "0.1.0",
+      "source": "./plugins/loadout",
+      "author": {
+        "name": "netwaif"
+      }
+    }
+  ]
+}

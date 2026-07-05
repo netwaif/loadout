@@ -1,0 +1,4 @@
+{"label": "knot 지식 vault", "corner": "지식 관리",
+ "desc": "벤더중립 평문 마크다운 지식 vault 연동",
+ "available": false, "scaffold": false,
+ "note": "입점 예정 — 현재는 멀티에이전트 설치 옵션(--with-knot)으로 제공"}

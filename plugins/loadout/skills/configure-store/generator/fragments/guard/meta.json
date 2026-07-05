@@ -1,0 +1,4 @@
+{"label": "goal 요금가드", "corner": "비용 통제",
+ "desc": "주간 사용량 한도 도달 시 자율 루프 자동 정지",
+ "available": false, "scaffold": false,
+ "note": "입점 예정 — 현재는 멀티에이전트 설치 옵션(--with-guard)으로 제공"}
