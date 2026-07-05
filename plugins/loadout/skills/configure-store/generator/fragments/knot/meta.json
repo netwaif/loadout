@@ -1,4 +1,6 @@
 {"label": "knot 지식 vault", "corner": "지식 관리",
- "desc": "벤더중립 평문 마크다운 지식 vault 연동",
- "available": false, "scaffold": false,
- "note": "입점 예정 — 현재는 멀티에이전트 설치 옵션(--with-knot)으로 제공"}
+ "desc": "벤더중립 평문 마크다운 지식 vault 연동(자동층). $KNOT_VAULT 게이트 — 미설정 시 no-op",
+ "available": true, "scaffold": false,
+ "note": "능동 스킬(save/ingest/query)은 multi-agent-starter 플러그인이 제공. 멀티 --with-knot 설치본과 중복 불필요",
+ "skip_if_contains": "<!-- knot:start -->",
+ "skip_note": "이미 knot 관리블록이 있습니다(--with-knot 설치본) — 생략합니다."}

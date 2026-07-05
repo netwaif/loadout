@@ -216,8 +216,14 @@ def main() -> None:
     for p in ordered:
         if catalog[p].get("scaffold"):
             print(f"  {prefix}{install_multiagent(target, dry=args.dry_run)}")
-        else:
-            print(f"  {prefix}{install_fragment(target, p, dry=args.dry_run)}")
+            continue
+        skip_marker = catalog[p].get("skip_if_contains")
+        if skip_marker:
+            instr = target / INSTRUCTION_FILE
+            if instr.is_file() and skip_marker in instr.read_text(encoding="utf-8"):
+                print(f"  [안내] {catalog[p].get('skip_note', catalog[p]['label'] + ' 생략')}")
+                continue
+        print(f"  {prefix}{install_fragment(target, p, dry=args.dry_run)}")
     print("\n  완료.")
 
 
