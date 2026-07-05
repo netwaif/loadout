@@ -36,8 +36,25 @@ def catalog_checks() -> int:
     return fails
 
 
+def karpathy_fragment_checks() -> int:
+    fails = 0
+    p = FRAGMENTS / "karpathy" / "fragment.md"
+    if not p.is_file():
+        print("  FAIL karpathy fragment 존재"); return 1
+    frag = p.read_text(encoding="utf-8")
+    ok = all(h in frag for h in ("### 1. Think Before Coding", "### 2. Simplicity First",
+                                 "### 3. Surgical Changes", "### 4. Goal-Driven Execution"))
+    print(f"  {'PASS' if ok else 'FAIL'} 4원칙 헤더 4종"); fails += 0 if ok else 1
+    ok = "[멀티에이전트도 설치된 경우]" in frag and "[Fable5 단독도 설치된 경우]" in frag
+    print(f"  {'PASS' if ok else 'FAIL'} 조건부 문단 2종"); fails += 0 if ok else 1
+    ok = "andrej-karpathy-skills" in frag
+    print(f"  {'PASS' if ok else 'FAIL'} 출처 표기"); fails += 0 if ok else 1
+    return fails
+
+
 def main() -> None:
     fails = catalog_checks()
+    fails += karpathy_fragment_checks()
     print("전부 PASS" if fails == 0 else f"{fails}개 FAIL")
     sys.exit(1 if fails else 0)
 
