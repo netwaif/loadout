@@ -120,26 +120,38 @@ def multiagent_installed(target: Path) -> bool:
 
 def install_multiagent(target: Path, dry: bool) -> str:
     """멀티에이전트 스캐폴드를 설치된 multi-agent-starter의 init.py에 위임.
-    init.py가 CLAUDE.md를 통째로 쓰므로 기존 조각 블록을 회수했다가 재-append(보존)."""
+    init.py가 CLAUDE.md를 통째로 쓰므로 기존 조각 블록을 회수했다가 재-append(보존).
+    karpathy 조각은 템플릿에 4원칙이 내장돼 있어 재부착하지 않는다."""
     init_py = find_multiagent_init()
     if init_py is None:
         sys.exit("[error] multi-agent-starter 플러그인을 찾지 못했습니다. "
                  "먼저 설치하거나 LOADOUT_MULTIAGENT_INIT로 init.py 경로를 지정하세요.")
     instr = target / INSTRUCTION_FILE
     saved: list[str] = []
-    if instr.is_file():
-        text = instr.read_text(encoding="utf-8")
-        for name in sorted(installed_names(target) - {"multiagent"}):
+    text = instr.read_text(encoding="utf-8") if instr.is_file() else ""
+    if text:
+        names = installed_names(target)
+        if "karpathy" in names:
+            print("  [안내] 멀티에이전트 템플릿에는 카파시 4원칙이 이미 내장 — 기존 karpathy 조각은 재부착하지 않습니다.")
+        for name in sorted(names - {"multiagent", "karpathy"}):
             start, end = marker(name)
             m = re.search(re.escape(start) + r".*?" + re.escape(end), text, flags=re.S)
             if m:
                 saved.append(m.group(0))
     if dry:
         return f"multiagent 스캐폴드 위임 예정 ({init_py}, 보존 조각 {len(saved)}개)"
+    bak = target / f"{INSTRUCTION_FILE}.loadout-bak"
+    if instr.is_file():
+        import shutil
+        shutil.copy2(instr, bak)
+        residue = re.sub(r"<!-- store:([a-z0-9-]+):start -->.*?<!-- store:\1:end -->", "", text, flags=re.S)
+        if residue.strip():
+            print(f"  [주의] 기존 {INSTRUCTION_FILE}의 비-store 본문은 init.py가 덮어씁니다 — 백업: {bak}")
     rc = subprocess.run([sys.executable, str(init_py), "--flavor", "claude",
                          "--target", str(target), "--yes", "--no-validate"]).returncode
     if rc != 0:
-        sys.exit(f"[error] init.py 실패 (exit {rc})")
+        note = f" — 이전 {INSTRUCTION_FILE} 백업: {bak}" if bak.is_file() else ""
+        sys.exit(f"[error] init.py 실패 (exit {rc}){note}")
     if saved:
         text = instr.read_text(encoding="utf-8").rstrip("\n")
         instr.write_text(text + "\n\n" + "\n\n".join(saved) + "\n", encoding="utf-8")

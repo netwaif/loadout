@@ -31,6 +31,18 @@ t = pathlib.Path(a.target); (t / "_shared").mkdir(parents=True, exist_ok=True)
 '''
 
 
+FAKE_INIT_FAIL = '''#!/usr/bin/env python3
+import argparse, pathlib, sys
+ap = argparse.ArgumentParser()
+ap.add_argument("--flavor"); ap.add_argument("--target")
+ap.add_argument("--yes", action="store_true"); ap.add_argument("--no-validate", action="store_true")
+a = ap.parse_args()
+t = pathlib.Path(a.target); t.mkdir(parents=True, exist_ok=True)
+(t / "CLAUDE.md").write_text("# half-written\\n", encoding="utf-8")
+sys.exit(3)
+'''
+
+
 def run_env(args: list[str], env_extra: dict) -> subprocess.CompletedProcess:
     import os
     env = dict(os.environ); env.update(env_extra)
@@ -187,6 +199,47 @@ def multiagent_checks() -> int:
     return fails
 
 
+def multiagent_safety_checks() -> int:
+    fails = 0
+    with tempfile.TemporaryDirectory() as d:
+        fake = Path(d) / "fake_init.py"; fake.write_text(FAKE_INIT, encoding="utf-8")
+        fake_fail = Path(d) / "fake_init_fail.py"; fake_fail.write_text(FAKE_INIT_FAIL, encoding="utf-8")
+        env = {"LOADOUT_MULTIAGENT_INIT": str(fake)}
+        env_fail = {"LOADOUT_MULTIAGENT_INIT": str(fake_fail)}
+        # 1. karpathy 선설치 → 나중 멀티 추가 시 karpathy 재부착 차단 + 안내
+        t1 = Path(d) / "s1"
+        run([sys.executable, str(STORE), "--target", str(t1), "--pick", "karpathy", "--yes"])
+        r = run_env([sys.executable, str(STORE), "--target", str(t1), "--pick", "multiagent", "--yes"], env)
+        text = (t1 / "CLAUDE.md").read_text(encoding="utf-8")
+        ok = (r.returncode == 0 and text.count(KARPATHY_START) == 0
+              and "재부착하지 않습니다" in r.stdout and "MultiAgent stub" in text)
+        print(f"  {'PASS' if ok else 'FAIL'} karpathy 선설치→멀티 추가 시 재부착 차단+안내"); fails += 0 if ok else 1
+        # 2. 손글씨 CLAUDE.md → [주의] 경고 + 백업에 원문 보존
+        t2 = Path(d) / "s2"; t2.mkdir(parents=True)
+        (t2 / "CLAUDE.md").write_text("# my rules\n", encoding="utf-8")
+        r = run_env([sys.executable, str(STORE), "--target", str(t2), "--pick", "multiagent", "--yes"], env)
+        bak = t2 / "CLAUDE.md.loadout-bak"
+        ok = (r.returncode == 0 and "[주의]" in r.stdout
+              and bak.is_file() and bak.read_text(encoding="utf-8") == "# my rules\n")
+        print(f"  {'PASS' if ok else 'FAIL'} 비-store 본문 경고+백업 원문 보존"); fails += 0 if ok else 1
+        # 3. init.py 실패(rc≠0) → 백업 경로 안내 + 회수 조각이 백업에 살아있음
+        t3 = Path(d) / "s3"
+        run([sys.executable, str(STORE), "--target", str(t3), "--pick", "agent-loop", "--yes"])
+        r = run_env([sys.executable, str(STORE), "--target", str(t3), "--pick", "multiagent", "--yes"], env_fail)
+        bak = t3 / "CLAUDE.md.loadout-bak"
+        ok = (r.returncode != 0 and "loadout-bak" in (r.stdout + r.stderr)
+              and bak.is_file() and "<!-- store:agent-loop:start -->" in bak.read_text(encoding="utf-8"))
+        print(f"  {'PASS' if ok else 'FAIL'} init.py 실패 시 백업 안내+조각 보존"); fails += 0 if ok else 1
+        # 4. dry-run은 백업 파일을 만들지 않음
+        t4 = Path(d) / "s4"
+        run([sys.executable, str(STORE), "--target", str(t4), "--pick", "agent-loop", "--yes"])
+        r = run_env([sys.executable, str(STORE), "--target", str(t4),
+                     "--pick", "multiagent", "--yes", "--dry-run"], env)
+        ok = r.returncode == 0 and not (t4 / "CLAUDE.md.loadout-bak").is_file()
+        print(f"  {'PASS' if ok else 'FAIL'} dry-run은 백업 미생성"); fails += 0 if ok else 1
+    return fails
+
+
 def main() -> None:
     fails = catalog_checks()
     fails += karpathy_fragment_checks()
@@ -195,6 +248,7 @@ def main() -> None:
     fails += exclusion_checks()
     fails += resub_escape_checks()
     fails += multiagent_checks()
+    fails += multiagent_safety_checks()
     print("전부 PASS" if fails == 0 else f"{fails}개 FAIL")
     sys.exit(1 if fails else 0)
 
