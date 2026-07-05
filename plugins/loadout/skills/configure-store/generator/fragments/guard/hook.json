@@ -1,0 +1,8 @@
+{
+  "hooks": [
+    {
+      "type": "command",
+      "command": "command -v coach >/dev/null 2>&1 && coach --hook --providers claude,codex,antigravity || true"
+    }
+  ]
+}

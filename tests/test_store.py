@@ -56,13 +56,13 @@ def catalog_checks() -> int:
     ok = set(metas) == {"karpathy", "fable5-solo", "multiagent", "agent-loop", "knot", "guard"}
     print(f"  {'PASS' if ok else 'FAIL'} 카탈로그 6품목"); fails += 0 if ok else 1
     avail = {n for n, m in metas.items() if m.get("available")}
-    ok = avail == {"karpathy", "fable5-solo", "multiagent", "agent-loop", "knot"}
-    print(f"  {'PASS' if ok else 'FAIL'} available 5품목(guard=입점 예정)"); fails += 0 if ok else 1
+    ok = avail == {"karpathy", "fable5-solo", "multiagent", "agent-loop", "knot", "guard"}
+    print(f"  {'PASS' if ok else 'FAIL'} available 6품목(전 품목 구매 가능)"); fails += 0 if ok else 1
     corners = {m["corner"] for m in metas.values()}
     ok = {"행동 규율", "실행 구조", "자율성"} <= corners
     print(f"  {'PASS' if ok else 'FAIL'} 코너 3종 존재"); fails += 0 if ok else 1
     r = run([sys.executable, str(STORE), "--list"])
-    ok = r.returncode == 0 and "카파시" in r.stdout and "입점 예정" in r.stdout
+    ok = r.returncode == 0 and "카파시" in r.stdout and "코너" in r.stdout
     print(f"  {'PASS' if ok else 'FAIL'} --list 출력"); fails += 0 if ok else 1
     return fails
 
@@ -114,9 +114,10 @@ def install_checks() -> int:
         run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "agent-loop", "--yes"])
         ok = (tgt / "prep" / "goal-prompt.template.md").is_file() and (tgt / "prep" / "채점표.template.md").is_file()
         print(f"  {'PASS' if ok else 'FAIL'} 딸린 파일 prep/ 복사"); fails += 0 if ok else 1
-        r = run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "guard", "--yes"])
-        ok = r.returncode == 2
-        print(f"  {'PASS' if ok else 'FAIL'} 입점 예정 pick 거부(exit 2)"); fails += 0 if ok else 1
+        before = (tgt / "CLAUDE.md").read_text(encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "no-such-item", "--yes"])
+        ok = r.returncode == 2 and (tgt / "CLAUDE.md").read_text(encoding="utf-8") == before
+        print(f"  {'PASS' if ok else 'FAIL'} 없는 품목 거부(exit 2)+무변경"); fails += 0 if ok else 1
     return fails
 
 
@@ -152,6 +153,7 @@ def resub_escape_checks() -> int:
         (frag_root / "esc").mkdir(parents=True)
         body = "## esc\n\n정규식 예시: `\\g<0>` 와 백슬래시 \\\\ 두 개.\n"
         (frag_root / "esc" / "fragment.md").write_text(body, encoding="utf-8")
+        (frag_root / "esc" / "meta.json").write_text('{"label": "esc", "corner": "t", "available": true}', encoding="utf-8")
         store.FRAGMENTS_DIR = frag_root
         tgt = Path(d) / "t"
         store.install_fragment(tgt, "esc", dry=False)   # append 경로
@@ -176,6 +178,38 @@ def knot_checks() -> int:
         text = (tgt2 / "CLAUDE.md").read_text(encoding="utf-8")
         ok = r.returncode == 0 and "<!-- store:knot:start -->" not in text and "생략" in r.stdout
         print(f"  {'PASS' if ok else 'FAIL'} 기존 --with-knot 블록 감지 시 생략"); fails += 0 if ok else 1
+    return fails
+
+
+def guard_checks() -> int:
+    fails = 0
+    with tempfile.TemporaryDirectory() as d:
+        tgt = Path(d) / "g1"
+        run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "guard", "--yes"])
+        s = tgt / ".claude" / "settings.json"
+        data = json.loads(s.read_text(encoding="utf-8"))
+        stops = data.get("hooks", {}).get("Stop", [])
+        ok = sum("coach --hook" in json.dumps(e) for e in stops) == 1
+        print(f"  {'PASS' if ok else 'FAIL'} guard Stop 훅 주입"); fails += 0 if ok else 1
+        text = (tgt / "CLAUDE.md").read_text(encoding="utf-8")
+        ok = "<!-- store:guard:start -->" in text
+        print(f"  {'PASS' if ok else 'FAIL'} guard CLAUDE.md 조각"); fails += 0 if ok else 1
+        run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "guard", "--yes"])
+        data = json.loads(s.read_text(encoding="utf-8"))
+        ok = sum("coach --hook" in json.dumps(e) for e in data["hooks"]["Stop"]) == 1
+        print(f"  {'PASS' if ok else 'FAIL'} 훅 멱등(재설치=1개)"); fails += 0 if ok else 1
+        tgt2 = Path(d) / "g2"; (tgt2 / ".claude").mkdir(parents=True)
+        (tgt2 / ".claude" / "settings.json").write_text(
+            '{"hooks": {"Stop": [{"type": "command", "command": "echo user-own"}]}}', encoding="utf-8")
+        run([sys.executable, str(STORE), "--target", str(tgt2), "--pick", "guard", "--yes"])
+        data = json.loads((tgt2 / ".claude" / "settings.json").read_text(encoding="utf-8"))
+        cmds = json.dumps(data["hooks"]["Stop"])
+        ok = "user-own" in cmds and "coach --hook" in cmds
+        print(f"  {'PASS' if ok else 'FAIL'} 사용자 기존 훅 보존"); fails += 0 if ok else 1
+        tgt3 = Path(d) / "g3"
+        run([sys.executable, str(STORE), "--target", str(tgt3), "--pick", "guard", "--yes", "--dry-run"])
+        ok = not (tgt3 / ".claude" / "settings.json").is_file() and not (tgt3 / "CLAUDE.md").is_file()
+        print(f"  {'PASS' if ok else 'FAIL'} dry-run 무변경"); fails += 0 if ok else 1
     return fails
 
 
@@ -265,6 +299,7 @@ def main() -> None:
     fails += exclusion_checks()
     fails += resub_escape_checks()
     fails += knot_checks()
+    fails += guard_checks()
     fails += multiagent_checks()
     fails += multiagent_safety_checks()
     print("전부 PASS" if fails == 0 else f"{fails}개 FAIL")

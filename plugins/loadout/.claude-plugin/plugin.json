@@ -1,6 +1,6 @@
 {
   "name": "loadout",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CLAUDE.md 구성 백화점. 작업 폴더 성격에 맞는 구성 조각(카파시 4원칙·Fable5 단독·멀티에이전트·에이전트 루프 등)을 카탈로그에서 골라 담아 결정적으로 설치한다 — 마커 멱등 append, 코너 기반 배타, 조건부 문단 조합.",
   "author": {
     "name": "netwaif"

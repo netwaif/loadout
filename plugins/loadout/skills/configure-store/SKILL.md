@@ -18,7 +18,7 @@ description: Use when the user wants to pick-and-install CLAUDE.md 구성 조각
    python3 "<이 스킬 폴더>/generator/store.py" --target "<대상폴더>" --pick <품목1,품목2> --yes
    ```
 5. **결과 보고** — 배타 위반(exit 2)이면 위반 내용을 그대로 전달한다. "완료"는 exit 0일 때만.
-6. **멀티에이전트 포함 시** — multi-agent-starter 플러그인이 설치돼 있어야 한다(store가 그 init.py에 위임). 못 찾으면 설치 안내 후 중단. knot·요금가드 옵션은 configure-multiagent 스킬에서 추가 가능(백화점에는 입점 예정).
+6. **멀티에이전트 포함 시** — multi-agent-starter 플러그인이 설치돼 있어야 한다(store가 그 init.py에 위임). 못 찾으면 설치 안내 후 중단. knot·요금가드도 카탈로그에서 담을 수 있다. knot 능동 스킬과 codex용 가드 워처는 multi-agent-starter가 제공.
 
 ## 동작 보장
 

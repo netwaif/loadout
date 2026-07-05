@@ -72,6 +72,34 @@ def check_exclusions(picks: list[str], installed: set[str], catalog: dict) -> li
     return problems
 
 
+GUARD_HOOK_MARKER = "coach --hook"
+
+
+def merge_claude_settings_hook(target: Path, hook_file: Path, dry: bool) -> str:
+    """대상 .claude/settings.json의 hooks.Stop에 항목을 멱등 병합.
+    사용자 훅 보존, 마커(coach --hook) 항목만 dedup 후 정본으로 교체."""
+    entry = json.loads(hook_file.read_text(encoding="utf-8"))
+    dest = target / ".claude" / "settings.json"
+    try:
+        data = json.loads(dest.read_text(encoding="utf-8")) if dest.is_file() else {}
+    except json.JSONDecodeError:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        hooks = data["hooks"] = {}
+    stop = hooks.get("Stop")
+    if not isinstance(stop, list):
+        stop = hooks["Stop"] = []
+    stop[:] = [e for e in stop if GUARD_HOOK_MARKER not in json.dumps(e, ensure_ascii=False)]
+    stop.append(entry)
+    if not dry:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return "Stop 훅 병합 → .claude/settings.json (coach --hook)"
+
+
 def install_fragment(target: Path, name: str, dry: bool) -> str:
     """조각을 대상 CLAUDE.md에 멱등 삽입(마커 교체-또는-append) + files/ 트리 복사."""
     frag_dir = FRAGMENTS_DIR / name
@@ -101,6 +129,11 @@ def install_fragment(target: Path, name: str, dry: bool) -> str:
                 shutil.copy2(src, dest)
             copied += 1
     extra = f" (+딸린 파일 {copied}개)" if copied else ""
+    meta = json.loads((frag_dir / "meta.json").read_text(encoding="utf-8"))
+    hook_rel = meta.get("claude_settings_hook")
+    if hook_rel:
+        msg = merge_claude_settings_hook(target, frag_dir / hook_rel, dry)
+        extra += f" (+{msg})"
     return f"{name} {action} → {INSTRUCTION_FILE}{extra}"
 
 
