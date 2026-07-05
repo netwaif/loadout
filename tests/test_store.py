@@ -90,6 +90,26 @@ def install_checks() -> int:
     return fails
 
 
+def exclusion_checks() -> int:
+    fails = 0
+    with tempfile.TemporaryDirectory() as d:
+        tgt = Path(d) / "t2"
+        r = run([sys.executable, str(STORE), "--target", str(tgt),
+                 "--pick", "fable5-solo,multiagent", "--yes"])
+        ok = r.returncode == 2 and not (tgt / "CLAUDE.md").is_file()
+        print(f"  {'PASS' if ok else 'FAIL'} 픽 내 배타(동시) 거부+무변경"); fails += 0 if ok else 1
+        run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "fable5-solo", "--yes"])
+        before = (tgt / "CLAUDE.md").read_text(encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "multiagent", "--yes"])
+        after = (tgt / "CLAUDE.md").read_text(encoding="utf-8")
+        ok = r.returncode == 2 and before == after
+        print(f"  {'PASS' if ok else 'FAIL'} 기설치 배타(추가) 거부+무변경"); fails += 0 if ok else 1
+        r = run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "fable5-solo", "--yes"])
+        ok = r.returncode == 0
+        print(f"  {'PASS' if ok else 'FAIL'} 동일 품목 재설치는 허용(멱등)"); fails += 0 if ok else 1
+    return fails
+
+
 def resub_escape_checks() -> int:
     """재설치(교체 경로)에서 조각 본문의 backslash escape(\\g, \\\\)가 byte-exact로 보존되는지."""
     fails = 0
@@ -117,6 +137,7 @@ def main() -> None:
     fails += karpathy_fragment_checks()
     fails += fragment_content_checks()
     fails += install_checks()
+    fails += exclusion_checks()
     fails += resub_escape_checks()
     print("전부 PASS" if fails == 0 else f"{fails}개 FAIL")
     sys.exit(1 if fails else 0)

@@ -58,6 +58,20 @@ def installed_names(target: Path) -> set[str]:
     return set(re.findall(r"<!-- store:([a-z0-9-]+):start -->", instr.read_text(encoding="utf-8")))
 
 
+def check_exclusions(picks: list[str], installed: set[str], catalog: dict) -> list[str]:
+    """같은 corner = 상호배타. picks 내부 쌍 + picks↔기설치(동일 품목 제외)."""
+    problems: list[str] = []
+    for i, a in enumerate(picks):
+        for b in picks[i + 1:]:
+            if catalog[a]["corner"] == catalog[b]["corner"]:
+                problems.append(f"{catalog[a]['label']} ↔ {catalog[b]['label']}: 같은 코너({catalog[a]['corner']}) — 동시 설치 불가")
+    for p in picks:
+        for ins in installed:
+            if ins != p and ins in catalog and catalog[ins]["corner"] == catalog[p]["corner"]:
+                problems.append(f"{catalog[p]['label']}: 이미 설치된 {catalog[ins]['label']}와 같은 코너({catalog[p]['corner']}) — 설치 불가")
+    return problems
+
+
 def install_fragment(target: Path, name: str, dry: bool) -> str:
     """조각을 대상 CLAUDE.md에 멱등 삽입(마커 교체-또는-append) + files/ 트리 복사."""
     frag_dir = FRAGMENTS_DIR / name
@@ -122,6 +136,13 @@ def main() -> None:
     if target == SCRIPT_DIR or SCRIPT_DIR in target.parents or target in SCRIPT_DIR.parents:
         sys.exit(f"[error] installer 트리 안에는 설치할 수 없습니다: {target}")
 
+    problems = check_exclusions(picks, installed_names(target), catalog)
+    if problems:
+        print("[배타 위반] 설치를 거부합니다 — 대상 파일은 변경되지 않았습니다:")
+        for msg in problems:
+            print(f"  · {msg}")
+        sys.exit(2)
+
     print(f"  target : {target}")
     print(f"  담은 품목: {', '.join(catalog[p]['label'] for p in picks)}")
     if not args.yes and not args.dry_run:
@@ -130,6 +151,8 @@ def main() -> None:
 
     prefix = "(dry) " if args.dry_run else ""
     for p in picks:
+        if catalog[p].get("scaffold"):
+            sys.exit("[error] multiagent 설치는 아직 미구현 (Task 6)")  # 임시 가드 — Task 6에서 init.py 위임으로 교체
         print(f"  {prefix}{install_fragment(target, p, dry=args.dry_run)}")
     print("\n  완료.")
 
