@@ -51,6 +51,45 @@ def print_catalog(catalog: dict[str, dict]) -> None:
     print("\n규칙: 같은 코너 품목끼리는 함께 설치할 수 없습니다(상호배타). 코너가 다르면 조합 자유.")
 
 
+def installed_names(target: Path) -> set[str]:
+    instr = target / INSTRUCTION_FILE
+    if not instr.is_file():
+        return set()
+    return set(re.findall(r"<!-- store:([a-z0-9-]+):start -->", instr.read_text(encoding="utf-8")))
+
+
+def install_fragment(target: Path, name: str, dry: bool) -> str:
+    """조각을 대상 CLAUDE.md에 멱등 삽입(마커 교체-또는-append) + files/ 트리 복사."""
+    frag_dir = FRAGMENTS_DIR / name
+    start, end = marker(name)
+    block = f"{start}\n{(frag_dir / 'fragment.md').read_text(encoding='utf-8').strip(chr(10))}\n{end}"
+    instr = target / INSTRUCTION_FILE
+    text = instr.read_text(encoding="utf-8") if instr.is_file() else ""
+    if start in text and end in text:
+        new = re.sub(re.escape(start) + r".*?" + re.escape(end), block, text, count=1, flags=re.S)
+        action = "교체"
+    else:
+        new = (text.rstrip("\n") + "\n\n" if text else "") + block + "\n"
+        action = "설치"
+    if not dry:
+        target.mkdir(parents=True, exist_ok=True)
+        instr.write_text(new, encoding="utf-8")
+    files_dir = frag_dir / "files"
+    copied = 0
+    if files_dir.is_dir():
+        import shutil
+        for src in sorted(files_dir.rglob("*")):
+            if src.is_dir():
+                continue
+            dest = target / src.relative_to(files_dir)
+            if not dry:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+            copied += 1
+    extra = f" (+딸린 파일 {copied}개)" if copied else ""
+    return f"{name} {action} → {INSTRUCTION_FILE}{extra}"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="CLAUDE.md 구성 백화점 (결정적 조각 설치기)")
     ap.add_argument("--list", action="store_true", help="카탈로그 출력")
@@ -67,6 +106,32 @@ def main() -> None:
     if args.list or not (args.target and args.pick):
         print_catalog(catalog)
         return
+
+    picks = [p.strip() for p in args.pick.split(",") if p.strip()]
+    unknown = [p for p in picks if p not in catalog]
+    if unknown:
+        print(f"[error] 없는 품목: {', '.join(unknown)}")
+        sys.exit(2)
+    unavailable = [p for p in picks if not catalog[p]["available"]]
+    if unavailable:
+        for p in unavailable:
+            print(f"[안내] {catalog[p]['label']}: {catalog[p]['note']}")
+        sys.exit(2)
+
+    target = Path(args.target).expanduser().resolve()
+    if target == SCRIPT_DIR or SCRIPT_DIR in target.parents or target in SCRIPT_DIR.parents:
+        sys.exit(f"[error] installer 트리 안에는 설치할 수 없습니다: {target}")
+
+    print(f"  target : {target}")
+    print(f"  담은 품목: {', '.join(catalog[p]['label'] for p in picks)}")
+    if not args.yes and not args.dry_run:
+        if input("\n진행할까요? [y/N]: ").strip().lower() not in ("y", "yes"):
+            sys.exit("취소됨")
+
+    prefix = "(dry) " if args.dry_run else ""
+    for p in picks:
+        print(f"  {prefix}{install_fragment(target, p, dry=args.dry_run)}")
+    print("\n  완료.")
 
 
 if __name__ == "__main__":

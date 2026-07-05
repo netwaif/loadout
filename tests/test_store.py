@@ -12,6 +12,7 @@ REPO = Path(__file__).resolve().parents[1]
 STORE_GEN = REPO / "plugins" / "loadout" / "skills" / "configure-store" / "generator"
 STORE = STORE_GEN / "store.py"
 FRAGMENTS = STORE_GEN / "fragments"
+KARPATHY_START, KARPATHY_END = "<!-- store:karpathy:start -->", "<!-- store:karpathy:end -->"
 
 
 def run(args: list[str]) -> subprocess.CompletedProcess:
@@ -68,10 +69,32 @@ def fragment_content_checks() -> int:
     return fails
 
 
+def install_checks() -> int:
+    fails = 0
+    with tempfile.TemporaryDirectory() as d:
+        tgt = Path(d) / "t1"
+        r = run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "karpathy", "--yes"])
+        text = (tgt / "CLAUDE.md").read_text(encoding="utf-8") if (tgt / "CLAUDE.md").is_file() else ""
+        ok = r.returncode == 0 and KARPATHY_START in text and KARPATHY_END in text
+        print(f"  {'PASS' if ok else 'FAIL'} 단일 조각 설치(마커)"); fails += 0 if ok else 1
+        run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "karpathy", "--yes"])
+        text2 = (tgt / "CLAUDE.md").read_text(encoding="utf-8")
+        ok = text2.count(KARPATHY_START) == 1
+        print(f"  {'PASS' if ok else 'FAIL'} 멱등(재설치=교체 1회)"); fails += 0 if ok else 1
+        run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "agent-loop", "--yes"])
+        ok = (tgt / "prep" / "goal-prompt.template.md").is_file() and (tgt / "prep" / "채점표.template.md").is_file()
+        print(f"  {'PASS' if ok else 'FAIL'} 딸린 파일 prep/ 복사"); fails += 0 if ok else 1
+        r = run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "knot", "--yes"])
+        ok = r.returncode == 2
+        print(f"  {'PASS' if ok else 'FAIL'} 입점 예정 pick 거부(exit 2)"); fails += 0 if ok else 1
+    return fails
+
+
 def main() -> None:
     fails = catalog_checks()
     fails += karpathy_fragment_checks()
     fails += fragment_content_checks()
+    fails += install_checks()
     print("전부 PASS" if fails == 0 else f"{fails}개 FAIL")
     sys.exit(1 if fails else 0)
 
