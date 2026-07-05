@@ -52,9 +52,26 @@ def karpathy_fragment_checks() -> int:
     return fails
 
 
+def fragment_content_checks() -> int:
+    fails = 0
+    f5 = (FRAGMENTS / "fable5-solo" / "fragment.md").read_text(encoding="utf-8")
+    ok = "다른 모델" in f5 and "호출하지 않는다" in f5
+    print(f"  {'PASS' if ok else 'FAIL'} fable5-solo 단독 실행 명시"); fails += 0 if ok else 1
+    loop = (FRAGMENTS / "agent-loop" / "fragment.md").read_text(encoding="utf-8")
+    ok = all(k in loop for k in ("완료조건", "이터레이션 캡", "[멀티에이전트도 설치된 경우]", "[요금가드도 설치된 경우]"))
+    print(f"  {'PASS' if ok else 'FAIL'} agent-loop 핵심 규율+조건부 2종"); fails += 0 if ok else 1
+    ok = all((FRAGMENTS / "agent-loop" / "files" / "prep" / n).is_file()
+             for n in ("goal-prompt.template.md", "채점표.template.md"))
+    print(f"  {'PASS' if ok else 'FAIL'} agent-loop 딸린 파일 2장"); fails += 0 if ok else 1
+    ok = all((FRAGMENTS / "_TEMPLATE" / n).is_file() for n in ("meta.json", "fragment.md", "README.md"))
+    print(f"  {'PASS' if ok else 'FAIL'} 입점 양식 _TEMPLATE"); fails += 0 if ok else 1
+    return fails
+
+
 def main() -> None:
     fails = catalog_checks()
     fails += karpathy_fragment_checks()
+    fails += fragment_content_checks()
     print("전부 PASS" if fails == 0 else f"{fails}개 FAIL")
     sys.exit(1 if fails else 0)
 
