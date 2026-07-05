@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -22,7 +23,6 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 FRAGMENTS_DIR = SCRIPT_DIR / "fragments"
-INIT_PY = SCRIPT_DIR.parents[1] / "configure-multiagent" / "generator" / "init.py"
 INSTRUCTION_FILE = "CLAUDE.md"   # 1차 = claude flavor만. 2차서 flavor 매핑 확장.
 
 
@@ -104,6 +104,48 @@ def install_fragment(target: Path, name: str, dry: bool) -> str:
     return f"{name} {action} → {INSTRUCTION_FILE}{extra}"
 
 
+def find_multiagent_init() -> Path | None:
+    """multi-agent-starter init.py 탐색. env 지정 시 그 경로만 신뢰(없으면 None — 폴백 안 함)."""
+    env = os.environ.get("LOADOUT_MULTIAGENT_INIT")
+    if env:
+        p = Path(env).expanduser()
+        return p if p.is_file() else None
+    hits = sorted(Path.home().glob(".claude/plugins/**/skills/configure-multiagent/generator/init.py"))
+    return hits[-1] if hits else None
+
+
+def multiagent_installed(target: Path) -> bool:
+    return "multiagent" in installed_names(target) or (target / "_shared" / "orchestrator-rules.md").is_file()
+
+
+def install_multiagent(target: Path, dry: bool) -> str:
+    """멀티에이전트 스캐폴드를 설치된 multi-agent-starter의 init.py에 위임.
+    init.py가 CLAUDE.md를 통째로 쓰므로 기존 조각 블록을 회수했다가 재-append(보존)."""
+    init_py = find_multiagent_init()
+    if init_py is None:
+        sys.exit("[error] multi-agent-starter 플러그인을 찾지 못했습니다. "
+                 "먼저 설치하거나 LOADOUT_MULTIAGENT_INIT로 init.py 경로를 지정하세요.")
+    instr = target / INSTRUCTION_FILE
+    saved: list[str] = []
+    if instr.is_file():
+        text = instr.read_text(encoding="utf-8")
+        for name in sorted(installed_names(target) - {"multiagent"}):
+            start, end = marker(name)
+            m = re.search(re.escape(start) + r".*?" + re.escape(end), text, flags=re.S)
+            if m:
+                saved.append(m.group(0))
+    if dry:
+        return f"multiagent 스캐폴드 위임 예정 ({init_py}, 보존 조각 {len(saved)}개)"
+    rc = subprocess.run([sys.executable, str(init_py), "--flavor", "claude",
+                         "--target", str(target), "--yes", "--no-validate"]).returncode
+    if rc != 0:
+        sys.exit(f"[error] init.py 실패 (exit {rc})")
+    if saved:
+        text = instr.read_text(encoding="utf-8").rstrip("\n")
+        instr.write_text(text + "\n\n" + "\n\n".join(saved) + "\n", encoding="utf-8")
+    return f"multiagent 스캐폴드 설치 (init.py 위임, 보존 조각 {len(saved)}개 재부착)"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="CLAUDE.md 구성 백화점 (결정적 조각 설치기)")
     ap.add_argument("--list", action="store_true", help="카탈로그 출력")
@@ -122,6 +164,7 @@ def main() -> None:
         return
 
     picks = [p.strip() for p in args.pick.split(",") if p.strip()]
+    picks = list(dict.fromkeys(picks))  # 중복 pick 제거(순서 보존) — 같은 품목 2회가 배타 거부되지 않게
     unknown = [p for p in picks if p not in catalog]
     if unknown:
         print(f"[error] 없는 품목: {', '.join(unknown)}")
@@ -136,12 +179,19 @@ def main() -> None:
     if target == SCRIPT_DIR or SCRIPT_DIR in target.parents or target in SCRIPT_DIR.parents:
         sys.exit(f"[error] installer 트리 안에는 설치할 수 없습니다: {target}")
 
-    problems = check_exclusions(picks, installed_names(target), catalog)
+    installed = installed_names(target)
+    if multiagent_installed(target):
+        installed |= {"multiagent"}
+    problems = check_exclusions(picks, installed, catalog)
     if problems:
         print("[배타 위반] 설치를 거부합니다 — 대상 파일은 변경되지 않았습니다:")
         for msg in problems:
             print(f"  · {msg}")
         sys.exit(2)
+
+    if "karpathy" in picks and ("multiagent" in picks or "multiagent" in installed):
+        print("  [안내] 멀티에이전트 템플릿에는 카파시 4원칙이 이미 내장 — karpathy 설치를 생략합니다.")
+        picks = [p for p in picks if p != "karpathy"]
 
     print(f"  target : {target}")
     print(f"  담은 품목: {', '.join(catalog[p]['label'] for p in picks)}")
@@ -150,10 +200,12 @@ def main() -> None:
             sys.exit("취소됨")
 
     prefix = "(dry) " if args.dry_run else ""
-    for p in picks:
+    ordered = sorted(picks, key=lambda p: 0 if catalog[p].get("scaffold") else 1)
+    for p in ordered:
         if catalog[p].get("scaffold"):
-            sys.exit("[error] multiagent 설치는 아직 미구현 (Task 6)")  # 임시 가드 — Task 6에서 init.py 위임으로 교체
-        print(f"  {prefix}{install_fragment(target, p, dry=args.dry_run)}")
+            print(f"  {prefix}{install_multiagent(target, dry=args.dry_run)}")
+        else:
+            print(f"  {prefix}{install_fragment(target, p, dry=args.dry_run)}")
     print("\n  완료.")
 
 

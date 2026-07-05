@@ -19,6 +19,24 @@ def run(args: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(args, capture_output=True, text=True)
 
 
+FAKE_INIT = '''#!/usr/bin/env python3
+import argparse, pathlib
+ap = argparse.ArgumentParser()
+ap.add_argument("--flavor"); ap.add_argument("--target")
+ap.add_argument("--yes", action="store_true"); ap.add_argument("--no-validate", action="store_true")
+a = ap.parse_args()
+t = pathlib.Path(a.target); (t / "_shared").mkdir(parents=True, exist_ok=True)
+(t / "_shared" / "orchestrator-rules.md").write_text("stub", encoding="utf-8")
+(t / "CLAUDE.md").write_text("# MultiAgent stub CLAUDE.md\\n", encoding="utf-8")
+'''
+
+
+def run_env(args: list[str], env_extra: dict) -> subprocess.CompletedProcess:
+    import os
+    env = dict(os.environ); env.update(env_extra)
+    return subprocess.run(args, capture_output=True, text=True, env=env)
+
+
 def catalog_checks() -> int:
     fails = 0
     metas = {p.parent.name: json.loads(p.read_text(encoding="utf-8"))
@@ -132,6 +150,43 @@ def resub_escape_checks() -> int:
     return fails
 
 
+def multiagent_checks() -> int:
+    fails = 0
+    with tempfile.TemporaryDirectory() as d:
+        fake = Path(d) / "fake_init.py"; fake.write_text(FAKE_INIT, encoding="utf-8")
+        env = {"LOADOUT_MULTIAGENT_INIT": str(fake)}
+        tgt = Path(d) / "t3"
+        r = run_env([sys.executable, str(STORE), "--target", str(tgt),
+                     "--pick", "multiagent,agent-loop", "--yes"], env)
+        text = (tgt / "CLAUDE.md").read_text(encoding="utf-8")
+        ok = (r.returncode == 0 and "MultiAgent stub" in text
+              and "<!-- store:agent-loop:start -->" in text
+              and (tgt / "_shared" / "orchestrator-rules.md").is_file())
+        print(f"  {'PASS' if ok else 'FAIL'} 멀티 위임 + 조각 공존"); fails += 0 if ok else 1
+        # 나중 멀티 추가 시 기존 조각 보존
+        tgt2 = Path(d) / "t4"
+        run_env([sys.executable, str(STORE), "--target", str(tgt2), "--pick", "agent-loop", "--yes"], env)
+        run_env([sys.executable, str(STORE), "--target", str(tgt2), "--pick", "multiagent", "--yes"], env)
+        text = (tgt2 / "CLAUDE.md").read_text(encoding="utf-8")
+        ok = "MultiAgent stub" in text and text.count("<!-- store:agent-loop:start -->") == 1
+        print(f"  {'PASS' if ok else 'FAIL'} 나중 멀티 추가 시 기존 조각 보존"); fails += 0 if ok else 1
+        # karpathy×멀티 = 생략 안내
+        r = run_env([sys.executable, str(STORE), "--target", str(tgt2), "--pick", "karpathy", "--yes"], env)
+        text = (tgt2 / "CLAUDE.md").read_text(encoding="utf-8")
+        ok = r.returncode == 0 and "<!-- store:karpathy:start -->" not in text and "내장" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} karpathy×멀티=생략 안내"); fails += 0 if ok else 1
+        # 멀티 스캐폴드 위에 fable5-solo 추가 → 배타 거부(휴리스틱 감지)
+        r = run_env([sys.executable, str(STORE), "--target", str(tgt2), "--pick", "fable5-solo", "--yes"], env)
+        ok = r.returncode == 2
+        print(f"  {'PASS' if ok else 'FAIL'} 멀티(휴리스틱)↔fable5 배타 거부"); fails += 0 if ok else 1
+        # init.py 미발견 → 명확한 에러
+        r = run_env([sys.executable, str(STORE), "--target", str(Path(d) / "t5"),
+                     "--pick", "multiagent", "--yes"], {"LOADOUT_MULTIAGENT_INIT": str(Path(d) / "none.py")})
+        ok = r.returncode != 0 and "multi-agent-starter" in (r.stdout + r.stderr)
+        print(f"  {'PASS' if ok else 'FAIL'} init.py 미발견 시 안내 에러"); fails += 0 if ok else 1
+    return fails
+
+
 def main() -> None:
     fails = catalog_checks()
     fails += karpathy_fragment_checks()
@@ -139,6 +194,7 @@ def main() -> None:
     fails += install_checks()
     fails += exclusion_checks()
     fails += resub_escape_checks()
+    fails += multiagent_checks()
     print("전부 PASS" if fails == 0 else f"{fails}개 FAIL")
     sys.exit(1 if fails else 0)
 
