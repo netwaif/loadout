@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """CLAUDE.md 구성 백화점 — 결정적 조각 설치기.
 
-카탈로그의 구성 조각(fragment)을 골라 대상 폴더 CLAUDE.md에 마커 기반으로
+카탈로그의 구성 조각(fragment)을 골라 대상 폴더 지침 파일에 마커 기반으로
 멱등 append 한다. 멀티에이전트 품목만 configure-multiagent init.py에 스캐폴드 위임.
 - 결정적: 번들 조각을 그대로 삽입. LLM 자유작문 없음.
 - 배타: 같은 corner 품목 동시/중복 설치를 설치 시점에 거부(exit 2).
-- 1차 지원 하네스 = claude (CLAUDE.md). 조각은 순수 마크다운(벤더 중립).
+- flavor: claude(CLAUDE.md, 기본) | codex(AGENTS.md). 조각은 순수 마크다운(벤더 중립),
+  flavor별 문구가 필요한 조각만 fragment.codex.md 변형을 둔다.
 
 사용:
     python3 store.py --list
     python3 store.py --target ~/work/my-folder --pick karpathy,fable5-solo --yes
+    python3 store.py --target ~/work/my-folder --pick guard --flavor codex --yes
+    python3 store.py --target ~/work/my-folder --doctor
 """
 from __future__ import annotations
 
@@ -23,7 +26,9 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 FRAGMENTS_DIR = SCRIPT_DIR / "fragments"
-INSTRUCTION_FILE = "CLAUDE.md"   # 1차 = claude flavor만. 2차서 flavor 매핑 확장.
+FLAVOR_FILES = {"claude": "CLAUDE.md", "codex": "AGENTS.md"}
+FLAVOR = "claude"                # main()에서 --flavor로 설정
+INSTRUCTION_FILE = "CLAUDE.md"   # FLAVOR_FILES[FLAVOR]와 동기
 
 
 def marker(name: str) -> tuple[str, str]:
@@ -52,10 +57,14 @@ def print_catalog(catalog: dict[str, dict]) -> None:
 
 
 def installed_names(target: Path) -> set[str]:
-    instr = target / INSTRUCTION_FILE
-    if not instr.is_file():
-        return set()
-    return set(re.findall(r"<!-- store:([a-z0-9-]+):start -->", instr.read_text(encoding="utf-8")))
+    """설치된 조각 이름 — 폴더는 하나의 작업 공간이므로 두 지침 파일(CLAUDE.md/AGENTS.md) 합집합.
+    코너 배타가 flavor를 넘어 적용되게 한다(예: CLAUDE.md Fable5 단독 + AGENTS.md 멀티 = 모순)."""
+    names: set[str] = set()
+    for fname in FLAVOR_FILES.values():
+        instr = target / fname
+        if instr.is_file():
+            names |= set(re.findall(r"<!-- store:([a-z0-9-]+):start -->", instr.read_text(encoding="utf-8")))
+    return names
 
 
 def check_exclusions(picks: list[str], installed: set[str], catalog: dict) -> list[str]:
@@ -100,11 +109,30 @@ def merge_claude_settings_hook(target: Path, hook_file: Path, dry: bool) -> str:
     return "Stop 훅 병합 → .claude/settings.json (coach --hook)"
 
 
+def fragment_source(frag_dir: Path, instr_name: str) -> Path:
+    """flavor별 변형(fragment.codex.md)이 있으면 그것, 없으면 공용 fragment.md."""
+    variant = frag_dir / "fragment.codex.md"
+    return variant if instr_name == FLAVOR_FILES["codex"] and variant.is_file() else frag_dir / "fragment.md"
+
+
+def fragment_body(frag_dir: Path, instr_name: str) -> str:
+    return fragment_source(frag_dir, instr_name).read_text(encoding="utf-8").strip("\n")
+
+
+def fragment_files_dirs(frag_dir: Path) -> list[Path]:
+    """조각의 딸린 파일 트리 — files/(공용) + files.codex/(codex flavor 전용)."""
+    dirs = [frag_dir / "files"]
+    if FLAVOR == "codex":
+        dirs.append(frag_dir / "files.codex")
+    return [d for d in dirs if d.is_dir()]
+
+
 def install_fragment(target: Path, name: str, dry: bool) -> str:
-    """조각을 대상 CLAUDE.md에 멱등 삽입(마커 교체-또는-append) + files/ 트리 복사."""
+    """조각을 대상 지침 파일에 멱등 삽입(마커 교체-또는-append) + files/ 트리 복사."""
     frag_dir = FRAGMENTS_DIR / name
+    meta = json.loads((frag_dir / "meta.json").read_text(encoding="utf-8"))
     start, end = marker(name)
-    block = f"{start}\n{(frag_dir / 'fragment.md').read_text(encoding='utf-8').strip(chr(10))}\n{end}"
+    block = f"{start}\n{fragment_body(frag_dir, INSTRUCTION_FILE)}\n{end}"
     instr = target / INSTRUCTION_FILE
     text = instr.read_text(encoding="utf-8") if instr.is_file() else ""
     if start in text and end in text:
@@ -116,9 +144,8 @@ def install_fragment(target: Path, name: str, dry: bool) -> str:
     if not dry:
         target.mkdir(parents=True, exist_ok=True)
         instr.write_text(new, encoding="utf-8")
-    files_dir = frag_dir / "files"
     copied = 0
-    if files_dir.is_dir():
+    for files_dir in fragment_files_dirs(frag_dir):
         import shutil
         for src in sorted(files_dir.rglob("*")):
             if src.is_dir():
@@ -129,22 +156,26 @@ def install_fragment(target: Path, name: str, dry: bool) -> str:
                 shutil.copy2(src, dest)
             copied += 1
     extra = f" (+딸린 파일 {copied}개)" if copied else ""
-    meta = json.loads((frag_dir / "meta.json").read_text(encoding="utf-8"))
     hook_rel = meta.get("claude_settings_hook")
-    if hook_rel:
+    if hook_rel and FLAVOR == "claude":
         msg = merge_claude_settings_hook(target, frag_dir / hook_rel, dry)
         extra += f" (+{msg})"
     return f"{name} {action} → {INSTRUCTION_FILE}{extra}"
 
 
 def find_multiagent_init() -> Path | None:
-    """multi-agent-starter init.py 탐색. env 지정 시 그 경로만 신뢰(없으면 None — 폴백 안 함)."""
+    """multi-agent-starter init.py 탐색. env 지정 시 그 경로만 신뢰(없으면 None — 폴백 안 함).
+    현재 flavor의 하네스 플러그인 경로를 먼저, 다른 쪽을 폴백으로 훑는다."""
     env = os.environ.get("LOADOUT_MULTIAGENT_INIT")
     if env:
         p = Path(env).expanduser()
         return p if p.is_file() else None
-    hits = sorted(Path.home().glob(".claude/plugins/**/skills/configure-multiagent/generator/init.py"))
-    return hits[-1] if hits else None
+    roots = (".claude", ".codex") if FLAVOR == "claude" else (".codex", ".claude")
+    for root in roots:
+        hits = sorted(Path.home().glob(f"{root}/plugins/**/skills/configure-multiagent/generator/init.py"))
+        if hits:
+            return hits[-1]
+    return None
 
 
 def multiagent_installed(target: Path) -> bool:
@@ -163,7 +194,8 @@ def install_multiagent(target: Path, dry: bool) -> str:
     saved: list[str] = []
     text = instr.read_text(encoding="utf-8") if instr.is_file() else ""
     if text:
-        names = installed_names(target)
+        # 회수·재부착은 현재 flavor의 지침 파일에 있는 블록만 (다른 파일은 init.py가 안 건드림)
+        names = set(re.findall(r"<!-- store:([a-z0-9-]+):start -->", text))
         if "karpathy" in names:
             print("  [안내] 멀티에이전트 템플릿에는 카파시 4원칙이 이미 내장 — 기존 karpathy 조각은 재부착하지 않습니다.")
         for name in sorted(names - {"multiagent", "karpathy"}):
@@ -180,7 +212,7 @@ def install_multiagent(target: Path, dry: bool) -> str:
         residue = re.sub(r"<!-- store:([a-z0-9-]+):start -->.*?<!-- store:\1:end -->", "", text, flags=re.S)
         if residue.strip():
             print(f"  [주의] 기존 {INSTRUCTION_FILE}의 비-store 본문은 init.py가 덮어씁니다 — 백업: {bak}")
-    rc = subprocess.run([sys.executable, str(init_py), "--flavor", "claude",
+    rc = subprocess.run([sys.executable, str(init_py), "--flavor", FLAVOR,
                          "--target", str(target), "--yes", "--no-validate"]).returncode
     if rc != 0:
         note = f" — 이전 {INSTRUCTION_FILE} 백업: {bak}" if bak.is_file() else ""
@@ -191,18 +223,162 @@ def install_multiagent(target: Path, dry: bool) -> str:
     return f"multiagent 스캐폴드 설치 (init.py 위임, 보존 조각 {len(saved)}개 재부착)"
 
 
+def doctor(target: Path, catalog: dict) -> int:
+    """읽기 전용 진단. 아무것도 고치지 않는다. 반환 = exit 코드(FAIL 있으면 1)."""
+    counts = {"FAIL": 0, "WARN": 0}
+
+    def report(level: str, msg: str) -> None:
+        if level in counts:
+            counts[level] += 1
+        print(f"  [{level}]{' ' * (5 - len(level))}{msg}")
+
+    print(f"loadout doctor — {target}")
+    present = [(fl, target / fname) for fl, fname in FLAVOR_FILES.items() if (target / fname).is_file()]
+    if not present and not multiagent_installed(target):
+        print("  지침 파일(CLAUDE.md/AGENTS.md)이 없습니다 — 설치된 조각 없음.")
+        return 0
+
+    installed_by_file: dict[str, set[str]] = {}
+    for _fl, path in present:
+        text = path.read_text(encoding="utf-8")
+        tokens = re.findall(r"<!-- store:([a-z0-9-]+):(start|end) -->", text)
+        starts = [n for n, k in tokens if k == "start"]
+        ends = [n for n, k in tokens if k == "end"]
+        # 순서·중첩 검사(스택) — 개수가 맞아도 end-before-start·교차 중첩이면 블록이 깨진 것
+        order_bad: set[str] = set()
+        stack: list[str] = []
+        for n, kind in tokens:
+            if kind == "start":
+                stack.append(n)
+            elif stack and stack[-1] == n:
+                stack.pop()
+            else:
+                order_bad.add(n)
+        order_bad.update(stack)
+        clean: set[str] = set()
+        for n in sorted(set(starts) | set(ends)):
+            s, e = starts.count(n), ends.count(n)
+            if s != e:
+                report("FAIL", f"{path.name}: '{n}' 마커 짝 깨짐 (start {s} / end {e})")
+            elif s > 1:
+                report("FAIL", f"{path.name}: '{n}' 블록 중복 {s}개")
+            elif n in order_bad:
+                report("FAIL", f"{path.name}: '{n}' 마커 순서·교차 오류 (end가 먼저 오거나 다른 블록과 얽힘)")
+            else:
+                clean.add(n)
+        for n in sorted(clean):
+            if n not in catalog:
+                report("WARN", f"{path.name}: 카탈로그에 없는 조각 마커 '{n}'")
+        known = {n for n in clean if n in catalog}
+        for n in sorted(known):
+            start, end = marker(n)
+            m = re.search(re.escape(start) + r"\n(.*?)\n" + re.escape(end), text, flags=re.S)
+            src = fragment_source(FRAGMENTS_DIR / n, path.name)
+            if m and src.is_file() and m.group(1) != src.read_text(encoding="utf-8").strip("\n"):
+                report("WARN", f"{path.name}: '{n}' 블록이 카탈로그 최신본과 다름 — 재설치 권장")
+        report("OK", f"{path.name}: 마커 구조 점검 완료 (조각 {len(clean)}개)")
+        installed_by_file[path.name] = known
+
+    installed_all = set().union(*installed_by_file.values()) if installed_by_file else set()
+
+    # 코너 배타 — 폴더는 하나의 작업 공간이므로 두 지침 파일 합집합으로 판정
+    by_corner: dict[str, list[str]] = {}
+    for n in sorted(installed_all):
+        by_corner.setdefault(catalog[n]["corner"], []).append(n)
+    for corner, names in by_corner.items():
+        if len(names) > 1:
+            report("FAIL", f"같은 코너({corner}) 조각 공존 — {', '.join(names)}")
+
+    # 멀티에이전트 스캐폴드(마커 없는 위임 설치) — 배타·전제 점검
+    if multiagent_installed(target):
+        ma_corner = catalog.get("multiagent", {}).get("corner")
+        for n in sorted(installed_all - {"multiagent"}):
+            if catalog[n]["corner"] == ma_corner:
+                report("FAIL", f"멀티에이전트 스캐폴드와 같은 코너({ma_corner}) 조각 공존 — {n}")
+        if find_multiagent_init() is None:
+            report("WARN", "multiagent: multi-agent-starter init.py를 찾을 수 없음 — 재설치·업데이트 불가 상태")
+        else:
+            report("OK", "multiagent: starter init.py 탐색 가능")
+
+    # 딸린 파일 — files/(공용) + AGENTS.md에 설치된 조각은 files.codex/(codex 전용)도
+    for n in sorted(installed_all):
+        dirs = [FRAGMENTS_DIR / n / "files"]
+        if n in installed_by_file.get(FLAVOR_FILES["codex"], set()):
+            dirs.append(FRAGMENTS_DIR / n / "files.codex")
+        dirs = [d for d in dirs if d.is_dir()]
+        if not dirs:
+            continue
+        missing = [str(p.relative_to(d)) for d in dirs for p in sorted(d.rglob("*"))
+                   if p.is_file() and not (target / p.relative_to(d)).is_file()]
+        if missing:
+            report("WARN", f"{n}: 딸린 파일 유실 — {', '.join(missing)} — 재설치 권장")
+        else:
+            report("OK", f"{n}: 딸린 파일 존재")
+
+    # guard 전제조건 (배선은 설치된 지침 파일별로)
+    if "guard" in installed_all:
+        import shutil
+        if shutil.which("coach"):
+            report("OK", "guard: coach가 PATH에 있음")
+        else:
+            report("WARN", "guard: coach가 PATH에 없음 — 가드는 fail-open(무력) 상태")
+        if "guard" in installed_by_file.get(FLAVOR_FILES["claude"], set()):
+            wired: list = []
+            settings = target / ".claude" / "settings.json"
+            if settings.is_file():
+                try:
+                    stop = json.loads(settings.read_text(encoding="utf-8")).get("hooks", {}).get("Stop", [])
+                    wired = [e for e in stop if GUARD_HOOK_MARKER in json.dumps(e, ensure_ascii=False)]
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+            canonical = json.loads((FRAGMENTS_DIR / "guard" / "hook.json").read_text(encoding="utf-8"))
+            if not wired:
+                report("WARN", "guard(claude): .claude/settings.json에 coach --hook Stop 훅 없음 — 재설치 권장")
+            elif len(wired) != 1:
+                report("WARN", f"guard(claude): Stop 훅 중복({len(wired)}개) — 재설치 권장")
+            elif wired[0] != canonical:
+                report("WARN", "guard(claude): Stop 훅이 hook.json 정본과 불일치 — 재설치 권장")
+            else:
+                report("OK", "guard(claude): Stop 훅 정본 일치 (.claude/settings.json)")
+        if "guard" in installed_by_file.get(FLAVOR_FILES["codex"], set()):
+            canon = FRAGMENTS_DIR / "guard" / "files.codex" / "_shared" / "guard" / "codex_goal_watch.mjs"
+            watch = target / "_shared" / "guard" / "codex_goal_watch.mjs"
+            if watch.is_file():  # 부재는 위 딸린 파일 검사가 WARN 처리
+                if watch.read_bytes() != canon.read_bytes():
+                    report("WARN", "guard(codex): 워처가 codex_goal_watch.mjs 정본과 불일치 — 재설치 권장")
+                else:
+                    report("OK", "guard(codex): 워처 정본 일치 (_shared/guard/)")
+
+    verdict = ("FAIL " + str(counts['FAIL']) + "건" if counts["FAIL"] else "구조 이상 없음") \
+        + (f", WARN {counts['WARN']}건" if counts["WARN"] else "")
+    print(f"\n  진단 결과: {verdict}")
+    return 1 if counts["FAIL"] else 0
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="CLAUDE.md 구성 백화점 (결정적 조각 설치기)")
     ap.add_argument("--list", action="store_true", help="카탈로그 출력")
     ap.add_argument("--target", help="설치 대상 폴더")
     ap.add_argument("--pick", help="설치할 품목(쉼표 구분, 예: karpathy,agent-loop)")
+    ap.add_argument("--flavor", choices=sorted(FLAVOR_FILES), default="claude",
+                    help="대상 하네스: claude=CLAUDE.md(기본) | codex=AGENTS.md")
+    ap.add_argument("--doctor", action="store_true", help="설치 상태 진단(읽기 전용, 수정 없음)")
     ap.add_argument("--yes", action="store_true", help="확인 프롬프트 생략")
     ap.add_argument("--dry-run", action="store_true", help="실제 쓰지 않고 미리보기")
     args = ap.parse_args()
 
+    global FLAVOR, INSTRUCTION_FILE
+    FLAVOR = args.flavor
+    INSTRUCTION_FILE = FLAVOR_FILES[FLAVOR]
+
     catalog = load_catalog()
     if not catalog:
         sys.exit(f"[error] fragments가 없습니다: {FRAGMENTS_DIR}")
+
+    if args.doctor:
+        if not args.target:
+            sys.exit("[error] --doctor에는 --target이 필요합니다")
+        sys.exit(doctor(Path(args.target).expanduser().resolve(), catalog))
 
     if args.list or not (args.target and args.pick):
         print_catalog(catalog)

@@ -1,0 +1,20 @@
+{
+  "name": "loadout",
+  "interface": {
+    "displayName": "loadout"
+  },
+  "plugins": [
+    {
+      "name": "loadout",
+      "source": {
+        "source": "local",
+        "path": "./plugins/loadout"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Coding"
+    }
+  ]
+}

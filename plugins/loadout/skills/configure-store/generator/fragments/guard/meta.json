@@ -2,4 +2,4 @@
  "desc": "/goal 자율 루프가 주간 사용량 한도 도달 시 자동 정지 — 배선 설치(정책=coach 단일 정본, fail-open)",
  "available": true, "scaffold": false,
  "claude_settings_hook": "hook.json",
- "note": "전제: codexbar + coach(PATH). 런타임 스위치 = coach guard on|off|status"}
+ "note": "전제: codexbar + coach(PATH). 런타임 스위치 = coach guard on|off|status. codex flavor는 동봉 워처(files.codex/)를 _shared/guard/로 복사"}

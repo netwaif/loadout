@@ -27,7 +27,8 @@ ap.add_argument("--yes", action="store_true"); ap.add_argument("--no-validate", 
 a = ap.parse_args()
 t = pathlib.Path(a.target); (t / "_shared").mkdir(parents=True, exist_ok=True)
 (t / "_shared" / "orchestrator-rules.md").write_text("stub", encoding="utf-8")
-(t / "CLAUDE.md").write_text("# MultiAgent stub CLAUDE.md\\n", encoding="utf-8")
+fname = "AGENTS.md" if a.flavor == "codex" else "CLAUDE.md"
+(t / fname).write_text(f"# MultiAgent stub {a.flavor}\\n", encoding="utf-8")
 '''
 
 
@@ -53,11 +54,13 @@ def catalog_checks() -> int:
     fails = 0
     metas = {p.parent.name: json.loads(p.read_text(encoding="utf-8"))
              for p in FRAGMENTS.glob("*/meta.json") if not p.parent.name.startswith("_")}
-    ok = set(metas) == {"karpathy", "fable5-solo", "multiagent", "agent-loop", "knot", "guard"}
-    print(f"  {'PASS' if ok else 'FAIL'} 카탈로그 6품목"); fails += 0 if ok else 1
+    all_items = {"karpathy", "fable5-solo", "fable5-lowcost", "multiagent",
+                 "agent-loop", "knot", "guard", "session-handoff"}
+    ok = set(metas) == all_items
+    print(f"  {'PASS' if ok else 'FAIL'} 카탈로그 8품목"); fails += 0 if ok else 1
     avail = {n for n, m in metas.items() if m.get("available")}
-    ok = avail == {"karpathy", "fable5-solo", "multiagent", "agent-loop", "knot", "guard"}
-    print(f"  {'PASS' if ok else 'FAIL'} available 6품목(전 품목 구매 가능)"); fails += 0 if ok else 1
+    ok = avail == all_items
+    print(f"  {'PASS' if ok else 'FAIL'} available 8품목(전 품목 구매 가능)"); fails += 0 if ok else 1
     corners = {m["corner"] for m in metas.values()}
     ok = {"행동 규율", "실행 구조", "자율성"} <= corners
     print(f"  {'PASS' if ok else 'FAIL'} 코너 3종 존재"); fails += 0 if ok else 1
@@ -291,6 +294,175 @@ def multiagent_safety_checks() -> int:
     return fails
 
 
+def flavor_checks() -> int:
+    fails = 0
+    with tempfile.TemporaryDirectory() as d:
+        # codex flavor → AGENTS.md에 설치, CLAUDE.md는 안 만듦
+        tgt = Path(d) / "f1"
+        r = run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "karpathy",
+                 "--flavor", "codex", "--yes"])
+        text = (tgt / "AGENTS.md").read_text(encoding="utf-8") if (tgt / "AGENTS.md").is_file() else ""
+        ok = r.returncode == 0 and KARPATHY_START in text and not (tgt / "CLAUDE.md").is_file()
+        print(f"  {'PASS' if ok else 'FAIL'} codex flavor=AGENTS.md 설치"); fails += 0 if ok else 1
+        # multiagent 위임에 flavor 전달
+        fake = Path(d) / "fake_init.py"; fake.write_text(FAKE_INIT, encoding="utf-8")
+        env = {"LOADOUT_MULTIAGENT_INIT": str(fake)}
+        tgt2 = Path(d) / "f2"
+        r = run_env([sys.executable, str(STORE), "--target", str(tgt2), "--pick", "multiagent,agent-loop",
+                     "--flavor", "codex", "--yes"], env)
+        text = (tgt2 / "AGENTS.md").read_text(encoding="utf-8") if (tgt2 / "AGENTS.md").is_file() else ""
+        ok = (r.returncode == 0 and "MultiAgent stub codex" in text
+              and "<!-- store:agent-loop:start -->" in text)
+        print(f"  {'PASS' if ok else 'FAIL'} 멀티 위임에 flavor 전달+조각 공존(AGENTS.md)"); fails += 0 if ok else 1
+        # cross-flavor 배타: CLAUDE.md에 fable5-solo → AGENTS.md에 multiagent 거부
+        tgt3 = Path(d) / "f3"
+        run([sys.executable, str(STORE), "--target", str(tgt3), "--pick", "fable5-solo", "--yes"])
+        r = run_env([sys.executable, str(STORE), "--target", str(tgt3), "--pick", "multiagent",
+                     "--flavor", "codex", "--yes"], env)
+        ok = r.returncode == 2 and not (tgt3 / "AGENTS.md").is_file()
+        print(f"  {'PASS' if ok else 'FAIL'} cross-flavor 코너 배타 거부"); fails += 0 if ok else 1
+        # cross-flavor 동일 품목은 허용(양쪽 하네스에 같은 규율)
+        tgt4 = Path(d) / "f4"
+        run([sys.executable, str(STORE), "--target", str(tgt4), "--pick", "karpathy", "--yes"])
+        r = run([sys.executable, str(STORE), "--target", str(tgt4), "--pick", "karpathy",
+                 "--flavor", "codex", "--yes"])
+        ok = (r.returncode == 0 and (tgt4 / "AGENTS.md").is_file()
+              and KARPATHY_START in (tgt4 / "AGENTS.md").read_text(encoding="utf-8"))
+        print(f"  {'PASS' if ok else 'FAIL'} cross-flavor 동일 품목 허용"); fails += 0 if ok else 1
+    return fails
+
+
+def codex_guard_checks() -> int:
+    """guard × codex flavor — 워처는 loadout 동봉(files.codex/)이 정본, starter 불필요."""
+    fails = 0
+    canon = FRAGMENTS / "guard" / "files.codex" / "_shared" / "guard"
+    with tempfile.TemporaryDirectory() as d:
+        tgt = Path(d) / "cg1"
+        r = run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "guard",
+                 "--flavor", "codex", "--yes"])
+        text = (tgt / "AGENTS.md").read_text(encoding="utf-8") if (tgt / "AGENTS.md").is_file() else ""
+        ok = (r.returncode == 0 and "<!-- store:guard:start -->" in text
+              and "codex_goal_watch.mjs" in text)
+        print(f"  {'PASS' if ok else 'FAIL'} codex guard=fragment.codex.md 설치(starter 불필요)"); fails += 0 if ok else 1
+        w, rd = tgt / "_shared" / "guard" / "codex_goal_watch.mjs", tgt / "_shared" / "guard" / "README.md"
+        ok = (w.is_file() and rd.is_file()
+              and w.read_bytes() == (canon / "codex_goal_watch.mjs").read_bytes())
+        print(f"  {'PASS' if ok else 'FAIL'} 동봉 워처+README 복사(정본 바이트 일치)"); fails += 0 if ok else 1
+        ok = not (tgt / ".claude" / "settings.json").is_file()
+        print(f"  {'PASS' if ok else 'FAIL'} codex에선 claude 훅 미주입"); fails += 0 if ok else 1
+        # claude flavor guard는 워처를 복사하지 않음(files.codex는 codex 전용)
+        tgt2 = Path(d) / "cg2"
+        run([sys.executable, str(STORE), "--target", str(tgt2), "--pick", "guard", "--yes"])
+        ok = (tgt2 / ".claude" / "settings.json").is_file() and not (tgt2 / "_shared").exists()
+        print(f"  {'PASS' if ok else 'FAIL'} claude에선 워처 미복사"); fails += 0 if ok else 1
+        # dry-run은 워처 미복사
+        tgt3 = Path(d) / "cg3"
+        r = run([sys.executable, str(STORE), "--target", str(tgt3), "--pick", "guard",
+                 "--flavor", "codex", "--yes", "--dry-run"])
+        ok = r.returncode == 0 and not (tgt3 / "_shared").exists() and not (tgt3 / "AGENTS.md").is_file()
+        print(f"  {'PASS' if ok else 'FAIL'} dry-run 무변경(워처 포함)"); fails += 0 if ok else 1
+    return fails
+
+
+def doctor_checks() -> int:
+    fails = 0
+    with tempfile.TemporaryDirectory() as d:
+        # 정상 설치 → exit 0, FAIL 없음, 파일 무변경(읽기 전용)
+        tgt = Path(d) / "d1"
+        run([sys.executable, str(STORE), "--target", str(tgt), "--pick", "karpathy,agent-loop", "--yes"])
+        before = (tgt / "CLAUDE.md").read_text(encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(tgt), "--doctor"])
+        after = (tgt / "CLAUDE.md").read_text(encoding="utf-8")
+        ok = r.returncode == 0 and "[FAIL]" not in r.stdout and before == after
+        print(f"  {'PASS' if ok else 'FAIL'} doctor 정상=exit 0+무변경"); fails += 0 if ok else 1
+        # 마커 짝 깨짐 → exit 1
+        tgt2 = Path(d) / "d2"; tgt2.mkdir(parents=True)
+        (tgt2 / "CLAUDE.md").write_text("# x\n<!-- store:karpathy:start -->\n본문\n", encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(tgt2), "--doctor"])
+        ok = r.returncode == 1 and "짝 깨짐" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} 마커 짝 깨짐=FAIL exit 1"); fails += 0 if ok else 1
+        # 손편집 stale → WARN(exit 0)
+        tgt3 = Path(d) / "d3"
+        run([sys.executable, str(STORE), "--target", str(tgt3), "--pick", "karpathy", "--yes"])
+        p = tgt3 / "CLAUDE.md"
+        p.write_text(p.read_text(encoding="utf-8").replace("### 1. Think Before Coding", "### 1. 변조됨"),
+                     encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(tgt3), "--doctor"])
+        ok = r.returncode == 0 and "최신본과 다름" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} stale 조각=WARN"); fails += 0 if ok else 1
+        # 수동 편집으로 생긴 코너 배타 위반 → FAIL
+        tgt4 = Path(d) / "d4"
+        run([sys.executable, str(STORE), "--target", str(tgt4), "--pick", "fable5-solo", "--yes"])
+        p = tgt4 / "CLAUDE.md"
+        p.write_text(p.read_text(encoding="utf-8")
+                     + "\n<!-- store:multiagent:start -->\n수동 삽입\n<!-- store:multiagent:end -->\n",
+                     encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(tgt4), "--doctor"])
+        ok = r.returncode == 1 and "같은 코너" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} 코너 배타 위반=FAIL"); fails += 0 if ok else 1
+        # 딸린 파일 유실 → WARN
+        tgt5 = Path(d) / "d5"
+        run([sys.executable, str(STORE), "--target", str(tgt5), "--pick", "agent-loop", "--yes"])
+        (tgt5 / "prep" / "goal-prompt.template.md").unlink()
+        r = run([sys.executable, str(STORE), "--target", str(tgt5), "--doctor"])
+        ok = r.returncode == 0 and "딸린 파일 유실" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} 딸린 파일 유실=WARN"); fails += 0 if ok else 1
+        # guard(claude) 훅 배선 끊김 → WARN
+        tgt6 = Path(d) / "d6"
+        run([sys.executable, str(STORE), "--target", str(tgt6), "--pick", "guard", "--yes"])
+        (tgt6 / ".claude" / "settings.json").unlink()
+        r = run([sys.executable, str(STORE), "--target", str(tgt6), "--doctor"])
+        ok = r.returncode == 0 and "Stop 훅 없음" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} guard 훅 끊김=WARN"); fails += 0 if ok else 1
+        # 빈 폴더 → exit 0
+        r = run([sys.executable, str(STORE), "--target", str(Path(d) / "empty"), "--doctor"])
+        ok = r.returncode == 0
+        print(f"  {'PASS' if ok else 'FAIL'} 빈 폴더=exit 0"); fails += 0 if ok else 1
+        # end가 start보다 먼저(개수는 짝) → FAIL exit 1
+        tgt7 = Path(d) / "d7"; tgt7.mkdir(parents=True)
+        (tgt7 / "CLAUDE.md").write_text(
+            "<!-- store:karpathy:end -->\n본문\n<!-- store:karpathy:start -->\n", encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(tgt7), "--doctor"])
+        ok = r.returncode == 1 and "순서·교차" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} end-before-start=FAIL"); fails += 0 if ok else 1
+        # 교차 중첩(a:start b:start a:end b:end) → FAIL exit 1
+        tgt8 = Path(d) / "d8"; tgt8.mkdir(parents=True)
+        (tgt8 / "CLAUDE.md").write_text(
+            "<!-- store:karpathy:start -->\nA\n<!-- store:knot:start -->\nB\n"
+            "<!-- store:karpathy:end -->\nC\n<!-- store:knot:end -->\n", encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(tgt8), "--doctor"])
+        ok = r.returncode == 1 and "순서·교차" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} 교차 중첩=FAIL"); fails += 0 if ok else 1
+        # codex guard: README 유실 → WARN(딸린 파일) / 워처 변조 → WARN(정본 불일치) / 조각 변조 → WARN(stale)
+        tgt9 = Path(d) / "d9"
+        run([sys.executable, str(STORE), "--target", str(tgt9), "--pick", "guard",
+             "--flavor", "codex", "--yes"])
+        (tgt9 / "_shared" / "guard" / "README.md").unlink()
+        r = run([sys.executable, str(STORE), "--target", str(tgt9), "--doctor"])
+        ok = r.returncode == 0 and "README.md" in r.stdout and "재설치 권장" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} codex guard README 유실=WARN"); fails += 0 if ok else 1
+        w = tgt9 / "_shared" / "guard" / "codex_goal_watch.mjs"
+        w.write_text(w.read_text(encoding="utf-8") + "\n// 변조\n", encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(tgt9), "--doctor"])
+        ok = r.returncode == 0 and "정본과 불일치" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} 워처 변조=WARN(정본 바이트 대조)"); fails += 0 if ok else 1
+        p = tgt9 / "AGENTS.md"
+        p.write_text(p.read_text(encoding="utf-8").replace("goal 요금가드 (Codex)", "변조됨"), encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(tgt9), "--doctor"])
+        ok = r.returncode == 0 and "최신본과 다름" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} codex 변형 stale=WARN(fragment.codex.md 대조)"); fails += 0 if ok else 1
+        # claude guard: 훅 변조 → WARN(hook.json 정본 대조)
+        tgt10 = Path(d) / "d10"
+        run([sys.executable, str(STORE), "--target", str(tgt10), "--pick", "guard", "--yes"])
+        s = tgt10 / ".claude" / "settings.json"
+        s.write_text(s.read_text(encoding="utf-8").replace("coach --hook", "coach --hook --tampered"),
+                     encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(tgt10), "--doctor"])
+        ok = r.returncode == 0 and "정본과 불일치" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} claude 훅 변조=WARN(hook.json 정본 대조)"); fails += 0 if ok else 1
+    return fails
+
+
 def main() -> None:
     fails = catalog_checks()
     fails += karpathy_fragment_checks()
@@ -302,6 +474,9 @@ def main() -> None:
     fails += guard_checks()
     fails += multiagent_checks()
     fails += multiagent_safety_checks()
+    fails += flavor_checks()
+    fails += codex_guard_checks()
+    fails += doctor_checks()
     print("전부 PASS" if fails == 0 else f"{fails}개 FAIL")
     sys.exit(1 if fails else 0)
 
