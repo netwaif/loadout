@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.6] - 2026-07-10
+### Fixed
+- 문서의 codex 반영 누락 정리(docs only, 동작 변경 없음): README 품목 표에 Fable5 단독=claude 전용·저비용 Fable 5=codex "저비용 GPT 5.6" 번안 비고 추가, 입점 양식(_TEMPLATE/README.md)에 `label_codex` 규약 문서화, marketplace.json 상위 description 품목 열거를 현행 8종으로 갱신.
+
 ## [0.4.5] - 2026-07-10
 ### Changed
 - codex flavor 카탈로그 표시명: meta `label_codex` 규약 — `--list --flavor codex`에서 "저비용 Fable 5"가 **"저비용 GPT 5.6"**으로 표시(설치 확인 문구도 동일). 실사용에서 "GPT 저비용이 왜 안 보이지" 혼동 발생 → 라벨을 flavor 기준으로. SKILL 절차 1에 codex 대상이면 `--list --flavor codex` 명시.
