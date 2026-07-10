@@ -10,9 +10,9 @@ description: Use when the user wants to pick-and-install CLAUDE.md/AGENTS.md 구
 
 ## 절차
 
-1. **카탈로그 제시** — `python3 "<이 스킬 폴더>/generator/store.py" --list` 출력을 보여준다.
+1. **카탈로그 제시** — `python3 "<이 스킬 폴더>/generator/store.py" --list` 출력 **전문을 그대로** 보여준다(요약·발췌 금지).
 2. **대상 폴더·하네스 확인** — 어디에 설치할지 묻는다(정확한 경로 확인). 대상이 Codex(AGENTS.md) 폴더면 `--flavor codex`를 쓴다(기본은 claude=CLAUDE.md). 사용자가 명시하지 않고 대상 폴더에 AGENTS.md만 있으면 codex인지 확인한다.
-3. **품목 선택** — 사용자가 고른다. 규칙 안내: 같은 코너 품목은 함께 담을 수 없다(예: Fable5 단독 ↔ 멀티에이전트).
+3. **품목 선택** — 사용자가 텍스트로 고른다. **품목 목록을 옵션 선택 위젯(질문 UI)으로 띄우지 말 것** — 위젯은 옵션 개수 제한(예: 4개)이 있어 카탈로그가 조용히 잘린다. 규칙 안내: 같은 코너 품목은 함께 담을 수 없다(예: Fable5 단독 ↔ 멀티에이전트).
 4. **실행**:
    ```bash
    python3 "<이 스킬 폴더>/generator/store.py" --target "<대상폴더>" --pick <품목1,품목2> [--flavor codex] --yes
@@ -44,6 +44,7 @@ python3 "<이 스킬 폴더>/generator/store.py" --target "<대상폴더>" --doc
 
 ## Do NOT
 
+- 품목 선택을 옵션 위젯으로 나열하지 말 것 — 개수 제한으로 품목이 잘린 채 제시된다(전체 카탈로그는 `--list` 텍스트로).
 - 조각 내용을 손으로 CLAUDE.md에 붙여넣지 말 것(마커 없는 야생 설치 금지).
 - 같은 코너 배타를 우회해 설치하지 말 것.
 - 플러그인 자신의 폴더 안에 설치하지 말 것.

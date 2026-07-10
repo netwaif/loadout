@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.1] - 2026-07-10
+### Fixed
+- SKILL 절차 교정: 품목 선택을 옵션 위젯(질문 UI)으로 나열하지 않도록 명시 — 위젯 옵션 개수 제한(4개)으로 8품목 카탈로그가 조용히 잘리는 문제(실측: 저비용 Fable5·에이전트 루프·knot·요금가드 누락). 카탈로그는 `--list` 출력 전문, 선택은 텍스트로.
+
 ## [0.4.0] - 2026-07-10
 ### Added
 - `--doctor`: 읽기 전용 설치 진단 — 마커 짝 깨짐·블록 중복·코너 배타 위반(FAIL, exit 1) / stale 조각(카탈로그 최신본과 다름)·미지 마커·딸린 파일 유실·guard(coach PATH, claude 훅 배선, codex 워처)·multiagent(starter 탐색) 전제조건(WARN, exit 0). CLAUDE.md·AGENTS.md 둘 다 진단.
