@@ -1,3 +1,4 @@
 {"label": "Fable5 단독", "corner": "실행 구조",
  "desc": "Fable 5 혼자 다 한다 — 다른 모델·워커 호출 없음 (Anthropic 공식 팁 기반)",
- "available": true, "scaffold": false, "note": "Claude 단독 입점"}
+ "available": true, "scaffold": false, "flavors": ["claude"],
+ "note": "Claude 전용 — Anthropic 공식 Fable 5 팁 기반, GPT엔 대응 공식 지침 미확인이라 codex flavor 미지원"}

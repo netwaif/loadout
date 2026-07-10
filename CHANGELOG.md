@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.2] - 2026-07-10
+### Added
+- 저비용 Fable 5 품목의 codex 번안: `fragment.codex.md` — codex flavor로 담으면 **"저비용 GPT 5.6"**(역할 분리·reasoning effort 상한·기획 선행을 `/model`·`config.toml` 프로필 개념으로)이 AGENTS.md에 설치된다. claude flavor는 기존 Fable 5 원본 그대로.
+- meta `flavors` 필드: flavor 제한 품목 규약. **Fable5 단독은 `["claude"]`** — Anthropic 공식 Fable 5 팁 기반이라 GPT 대응 공식 지침이 확인되기 전까지 codex flavor에서 설치 거부(exit 2 + 안내). 카탈로그에 `[claude 전용]` 표기, doctor는 전용 품목이 다른 flavor 파일에 있으면 WARN.
+
 ## [0.4.1] - 2026-07-10
 ### Fixed
 - SKILL 절차 교정: 품목 선택을 옵션 위젯(질문 UI)으로 나열하지 않도록 명시 — 위젯 옵션 개수 제한(4개)으로 8품목 카탈로그가 조용히 잘리는 문제(실측: 저비용 Fable5·에이전트 루프·knot·요금가드 누락). 카탈로그는 `--list` 출력 전문, 선택은 텍스트로.

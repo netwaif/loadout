@@ -49,6 +49,8 @@ def print_catalog(catalog: dict[str, dict]) -> None:
     print("CLAUDE.md 구성 백화점 — 카탈로그")
     for i, (name, m) in enumerate(catalog.items(), 1):
         status = "" if m["available"] else "  [입점 예정]"
+        if m.get("flavors"):
+            status += f"  [{'·'.join(m['flavors'])} 전용]"
         print(f"  {i}. {m['label']} ({name}) — 코너: {m['corner']}{status}")
         print(f"     {m['desc']}")
         if m.get("note"):
@@ -239,7 +241,7 @@ def doctor(target: Path, catalog: dict) -> int:
         return 0
 
     installed_by_file: dict[str, set[str]] = {}
-    for _fl, path in present:
+    for fl, path in present:
         text = path.read_text(encoding="utf-8")
         tokens = re.findall(r"<!-- store:([a-z0-9-]+):(start|end) -->", text)
         starts = [n for n, k in tokens if k == "start"]
@@ -270,6 +272,10 @@ def doctor(target: Path, catalog: dict) -> int:
             if n not in catalog:
                 report("WARN", f"{path.name}: 카탈로그에 없는 조각 마커 '{n}'")
         known = {n for n in clean if n in catalog}
+        for n in sorted(known):
+            allowed = catalog[n].get("flavors")
+            if allowed and fl not in allowed:
+                report("WARN", f"{path.name}: '{n}'는 {'·'.join(allowed)} 전용 품목 — 이 파일에 설치돼 있음(제거 권장)")
         for n in sorted(known):
             start, end = marker(n)
             m = re.search(re.escape(start) + r"\n(.*?)\n" + re.escape(end), text, flags=re.S)
@@ -394,6 +400,12 @@ def main() -> None:
     if unavailable:
         for p in unavailable:
             print(f"[안내] {catalog[p]['label']}: {catalog[p]['note']}")
+        sys.exit(2)
+    wrong_flavor = [p for p in picks if FLAVOR not in catalog[p].get("flavors", list(FLAVOR_FILES))]
+    if wrong_flavor:
+        for p in wrong_flavor:
+            print(f"[안내] {catalog[p]['label']}: {'·'.join(catalog[p]['flavors'])} 전용 품목 — "
+                  f"{FLAVOR} flavor에는 설치할 수 없습니다. ({catalog[p]['note']})")
         sys.exit(2)
 
     target = Path(args.target).expanduser().resolve()

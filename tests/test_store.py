@@ -329,6 +329,34 @@ def flavor_checks() -> int:
         ok = (r.returncode == 0 and (tgt4 / "AGENTS.md").is_file()
               and KARPATHY_START in (tgt4 / "AGENTS.md").read_text(encoding="utf-8"))
         print(f"  {'PASS' if ok else 'FAIL'} cross-flavor 동일 품목 허용"); fails += 0 if ok else 1
+        # claude 전용 품목(fable5-solo)은 codex flavor 거부 + 무변경
+        tgt5 = Path(d) / "f5"
+        r = run([sys.executable, str(STORE), "--target", str(tgt5), "--pick", "fable5-solo",
+                 "--flavor", "codex", "--yes"])
+        ok = r.returncode == 2 and "전용 품목" in r.stdout and not (tgt5 / "AGENTS.md").is_file()
+        print(f"  {'PASS' if ok else 'FAIL'} claude 전용 품목 codex 거부+무변경"); fails += 0 if ok else 1
+        r = run([sys.executable, str(STORE), "--target", str(tgt5), "--pick", "fable5-solo", "--yes"])
+        ok = r.returncode == 0 and (tgt5 / "CLAUDE.md").is_file()
+        print(f"  {'PASS' if ok else 'FAIL'} 같은 품목 claude 설치는 정상"); fails += 0 if ok else 1
+        # 저비용 Fable5는 codex에서 GPT 5.6 번안(fragment.codex.md)으로 설치
+        tgt6 = Path(d) / "f6"
+        r = run([sys.executable, str(STORE), "--target", str(tgt6), "--pick", "fable5-lowcost",
+                 "--flavor", "codex", "--yes"])
+        text = (tgt6 / "AGENTS.md").read_text(encoding="utf-8") if (tgt6 / "AGENTS.md").is_file() else ""
+        ok = r.returncode == 0 and "저비용 GPT 5.6" in text and "Fable 5는 가장 비싼" not in text
+        print(f"  {'PASS' if ok else 'FAIL'} lowcost codex=GPT 5.6 번안 설치"); fails += 0 if ok else 1
+        run([sys.executable, str(STORE), "--target", str(tgt6), "--pick", "fable5-lowcost", "--yes"])
+        text = (tgt6 / "CLAUDE.md").read_text(encoding="utf-8")
+        ok = "저비용 Fable 5" in text and "GPT 5.6" not in text
+        print(f"  {'PASS' if ok else 'FAIL'} lowcost claude=Fable5 원본 유지"); fails += 0 if ok else 1
+        # doctor: claude 전용 마커가 AGENTS.md에 있으면 WARN
+        (tgt6 / "AGENTS.md").write_text(
+            (tgt6 / "AGENTS.md").read_text(encoding="utf-8")
+            + "\n<!-- store:fable5-solo:start -->\n수동 삽입\n<!-- store:fable5-solo:end -->\n",
+            encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(tgt6), "--doctor"])
+        ok = "전용 품목" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} doctor: 전용 품목 오설치=WARN"); fails += 0 if ok else 1
     return fails
 
 
