@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.3] - 2026-07-10
+### Changed
+- 저비용 GPT 5.6 조각(codex 번안)을 OpenAI 공식 지침으로 정밀화: 티어 라우팅(Sol=프런티어/Terra=균형/Luna=고효율) 반영하되 **"비싼 모델"="세션 가용 최상위 티어"** 기준(구독에 Sol 미제공 가능) — Sol 특화 지침 아님. 추론 강도 문구도 공식 표현(medium=균형 시작점, max=최난도 전용)에 맞춤.
+
 ## [0.4.2] - 2026-07-10
 ### Added
 - 저비용 Fable 5 품목의 codex 번안: `fragment.codex.md` — codex flavor로 담으면 **"저비용 GPT 5.6"**(역할 분리·reasoning effort 상한·기획 선행을 `/model`·`config.toml` 프로필 개념으로)이 AGENTS.md에 설치된다. claude flavor는 기존 Fable 5 원본 그대로.
