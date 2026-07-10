@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.5] - 2026-07-10
+### Changed
+- codex flavor 카탈로그 표시명: meta `label_codex` 규약 — `--list --flavor codex`에서 "저비용 Fable 5"가 **"저비용 GPT 5.6"**으로 표시(설치 확인 문구도 동일). 실사용에서 "GPT 저비용이 왜 안 보이지" 혼동 발생 → 라벨을 flavor 기준으로. SKILL 절차 1에 codex 대상이면 `--list --flavor codex` 명시.
+
 ## [0.4.4] - 2026-07-10
 ### Changed
 - 저비용 조각(claude·codex 둘 다) ① 역할 분리에 **위임 손익분기** 반영 — 3-run 실측(Fable 단독 $0.76 vs Haiku 위임 $0.78 vs Opus 위임 $1.80) 결과: 서브에이전트는 캐시 미공유 고정비 + 명세 작성 토큰 때문에, 산출물이 그걸 크게 넘는 대량 작업에서만 위임이 이긴다. **파일 몇 개짜리 단발 구현은 직접** 명시.

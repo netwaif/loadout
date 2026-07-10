@@ -10,7 +10,7 @@ description: Use when the user wants to pick-and-install CLAUDE.md/AGENTS.md 구
 
 ## 절차
 
-1. **카탈로그 제시** — `python3 "<이 스킬 폴더>/generator/store.py" --list` 출력 **전문을 그대로** 보여준다(요약·발췌 금지).
+1. **카탈로그 제시** — `python3 "<이 스킬 폴더>/generator/store.py" --list` 출력 **전문을 그대로** 보여준다(요약·발췌 금지). 대상이 Codex(AGENTS.md)면 `--list --flavor codex`로 — 품목 표시명이 codex 기준(예: 저비용 GPT 5.6)으로 나온다.
 2. **대상 폴더·하네스 확인** — 어디에 설치할지 묻는다(정확한 경로 확인). 대상이 Codex(AGENTS.md) 폴더면 `--flavor codex`를 쓴다(기본은 claude=CLAUDE.md). 사용자가 명시하지 않고 대상 폴더에 AGENTS.md만 있으면 codex인지 확인한다.
 3. **품목 선택** — 사용자가 텍스트로 고른다. **품목 목록을 옵션 선택 위젯(질문 UI)으로 띄우지 말 것** — 위젯은 옵션 개수 제한(예: 4개)이 있어 카탈로그가 조용히 잘린다. 규칙 안내: 같은 코너 품목은 함께 담을 수 없다(예: Fable5 단독 ↔ 멀티에이전트).
 4. **실행**:

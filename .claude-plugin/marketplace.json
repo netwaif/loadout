@@ -9,7 +9,7 @@
     {
       "name": "loadout",
       "description": "\"CLAUDE.md 구성 골라 담아줘\"로 조합형 구성 카탈로그를 제시하고 결정적 설치기(마커 멱등 append·코너 배타)로 대상 폴더에 설치. flavor(claude·codex=AGENTS.md)·doctor 진단 지원. 새 구성 추가 = 조각 폴더 하나(입점 양식 포함).",
-      "version": "0.4.4",
+      "version": "0.4.5",
       "source": "./plugins/loadout",
       "author": {
         "name": "netwaif"

@@ -45,13 +45,20 @@ def load_catalog() -> dict[str, dict]:
     return catalog
 
 
+def flavor_label(m: dict) -> str:
+    """flavor별 표시명 — codex에서 label_codex가 있으면 그걸 사용(예: 저비용 Fable 5 → 저비용 GPT 5.6)."""
+    if FLAVOR == "codex" and m.get("label_codex"):
+        return m["label_codex"]
+    return m["label"]
+
+
 def print_catalog(catalog: dict[str, dict]) -> None:
     print("CLAUDE.md 구성 백화점 — 카탈로그")
     for i, (name, m) in enumerate(catalog.items(), 1):
         status = "" if m["available"] else "  [입점 예정]"
         if m.get("flavors"):
             status += f"  [{'·'.join(m['flavors'])} 전용]"
-        print(f"  {i}. {m['label']} ({name}) — 코너: {m['corner']}{status}")
+        print(f"  {i}. {flavor_label(m)} ({name}) — 코너: {m['corner']}{status}")
         print(f"     {m['desc']}")
         if m.get("note"):
             print(f"     ※ {m['note']}")
@@ -427,7 +434,7 @@ def main() -> None:
         picks = [p for p in picks if p != "karpathy"]
 
     print(f"  target : {target}")
-    print(f"  담은 품목: {', '.join(catalog[p]['label'] for p in picks)}")
+    print(f"  담은 품목: {', '.join(flavor_label(catalog[p]) for p in picks)}")
     if not args.yes and not args.dry_run:
         if input("\n진행할까요? [y/N]: ").strip().lower() not in ("y", "yes"):
             sys.exit("취소됨")

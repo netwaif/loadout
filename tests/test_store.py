@@ -349,6 +349,13 @@ def flavor_checks() -> int:
         text = (tgt6 / "CLAUDE.md").read_text(encoding="utf-8")
         ok = "저비용 Fable 5" in text and "GPT 5.6" not in text
         print(f"  {'PASS' if ok else 'FAIL'} lowcost claude=Fable5 원본 유지"); fails += 0 if ok else 1
+        # codex flavor 카탈로그 라벨 = label_codex (저비용 GPT 5.6), 기본은 원본 라벨
+        r = run([sys.executable, str(STORE), "--list", "--flavor", "codex"])
+        ok = "저비용 GPT 5.6" in r.stdout and "저비용 Fable 5" not in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} codex --list 라벨=저비용 GPT 5.6"); fails += 0 if ok else 1
+        r = run([sys.executable, str(STORE), "--list"])
+        ok = "저비용 Fable 5" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} 기본 --list 라벨=저비용 Fable 5"); fails += 0 if ok else 1
         # doctor: claude 전용 마커가 AGENTS.md에 있으면 WARN
         (tgt6 / "AGENTS.md").write_text(
             (tgt6 / "AGENTS.md").read_text(encoding="utf-8")
