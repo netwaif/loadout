@@ -399,6 +399,98 @@ def codex_guard_checks() -> int:
     return fails
 
 
+def remove_checks() -> int:
+    fails = 0
+    with tempfile.TemporaryDirectory() as d:
+        # 1. 기본 반품 — 블록+딸린 파일 삭제, 파일이 비면 원상복구(파일 삭제)
+        t1 = Path(d) / "r1"
+        run([sys.executable, str(STORE), "--target", str(t1), "--pick", "agent-loop", "--yes"])
+        r = run([sys.executable, str(STORE), "--target", str(t1), "--remove", "agent-loop", "--yes"])
+        ok = (r.returncode == 0 and not (t1 / "CLAUDE.md").is_file() and not (t1 / "prep").exists())
+        print(f"  {'PASS' if ok else 'FAIL'} 기본 반품=블록·딸린 파일·빈 파일 삭제"); fails += 0 if ok else 1
+        # 2. 다른 조각은 보존
+        t2 = Path(d) / "r2"
+        run([sys.executable, str(STORE), "--target", str(t2), "--pick", "karpathy,no-yesman", "--yes"])
+        r = run([sys.executable, str(STORE), "--target", str(t2), "--remove", "no-yesman", "--yes"])
+        text = (t2 / "CLAUDE.md").read_text(encoding="utf-8")
+        ok = (r.returncode == 0 and KARPATHY_START in text
+              and "<!-- store:no-yesman:start -->" not in text)
+        print(f"  {'PASS' if ok else 'FAIL'} 부분 반품=다른 조각 보존"); fails += 0 if ok else 1
+        # 3. 미설치 반품 = no-op(멱등, exit 0) + 무변경
+        before = text
+        r = run([sys.executable, str(STORE), "--target", str(t2), "--remove", "knot", "--yes"])
+        ok = (r.returncode == 0 and "설치돼 있지 않음" in r.stdout
+              and (t2 / "CLAUDE.md").read_text(encoding="utf-8") == before)
+        print(f"  {'PASS' if ok else 'FAIL'} 미설치 반품=no-op exit 0"); fails += 0 if ok else 1
+        # 4. 수정된 딸린 파일은 보존, 정본 일치분만 삭제
+        t3 = Path(d) / "r3"
+        run([sys.executable, str(STORE), "--target", str(t3), "--pick", "agent-loop", "--yes"])
+        gp = t3 / "prep" / "goal-prompt.template.md"
+        gp.write_text(gp.read_text(encoding="utf-8") + "\n사용자 수정\n", encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(t3), "--remove", "agent-loop", "--yes"])
+        ok = (r.returncode == 0 and gp.is_file() and "보존" in r.stdout
+              and not (t3 / "prep" / "채점표.template.md").is_file())
+        print(f"  {'PASS' if ok else 'FAIL'} 수정 딸린 파일 보존+정본만 삭제"); fails += 0 if ok else 1
+        # 5. guard 반품 = Stop 훅 제거 + 사용자 훅 보존
+        t4 = Path(d) / "r4"; (t4 / ".claude").mkdir(parents=True)
+        (t4 / ".claude" / "settings.json").write_text(
+            '{"hooks": {"Stop": [{"type": "command", "command": "echo user-own"}]}}', encoding="utf-8")
+        run([sys.executable, str(STORE), "--target", str(t4), "--pick", "guard", "--yes"])
+        r = run([sys.executable, str(STORE), "--target", str(t4), "--remove", "guard", "--yes"])
+        data = json.loads((t4 / ".claude" / "settings.json").read_text(encoding="utf-8"))
+        cmds = json.dumps(data.get("hooks", {}).get("Stop", []))
+        ok = r.returncode == 0 and "user-own" in cmds and "coach --hook" not in cmds
+        print(f"  {'PASS' if ok else 'FAIL'} guard 반품=훅 제거+사용자 훅 보존"); fails += 0 if ok else 1
+        # 6. 사용자 훅 없으면 settings.json·빈 .claude/까지 원상복구
+        t5 = Path(d) / "r5"
+        run([sys.executable, str(STORE), "--target", str(t5), "--pick", "guard", "--yes"])
+        r = run([sys.executable, str(STORE), "--target", str(t5), "--remove", "guard", "--yes"])
+        ok = (r.returncode == 0 and not (t5 / ".claude" / "settings.json").is_file()
+              and not (t5 / ".claude").exists())
+        print(f"  {'PASS' if ok else 'FAIL'} guard 단독 반품=settings.json 원상복구"); fails += 0 if ok else 1
+        # 7. multiagent 반품 거부(exit 2) + 수동 절차 안내
+        r = run([sys.executable, str(STORE), "--target", str(t2), "--remove", "multiagent", "--yes"])
+        ok = r.returncode == 2 and "수동" in r.stdout
+        print(f"  {'PASS' if ok else 'FAIL'} multiagent 반품 거부=exit 2+안내"); fails += 0 if ok else 1
+        # 8. 스왑(배타 해소): fable5-solo 설치 상태에서 --remove+--pick이면 배타 통과
+        t6 = Path(d) / "r6"
+        fake = Path(d) / "fake_init.py"; fake.write_text(FAKE_INIT, encoding="utf-8")
+        env = {"LOADOUT_MULTIAGENT_INIT": str(fake)}
+        run([sys.executable, str(STORE), "--target", str(t6), "--pick", "fable5-solo", "--yes"])
+        r = run_env([sys.executable, str(STORE), "--target", str(t6),
+                     "--pick", "multiagent", "--yes", "--dry-run"], env)
+        ok = r.returncode == 2
+        print(f"  {'PASS' if ok else 'FAIL'} 스왑 대조군: --pick만=배타 거부"); fails += 0 if ok else 1
+        before = (t6 / "CLAUDE.md").read_text(encoding="utf-8")
+        r = run_env([sys.executable, str(STORE), "--target", str(t6),
+                     "--remove", "fable5-solo", "--pick", "multiagent", "--yes", "--dry-run"], env)
+        ok = (r.returncode == 0
+              and (t6 / "CLAUDE.md").read_text(encoding="utf-8") == before)
+        print(f"  {'PASS' if ok else 'FAIL'} 스왑: --remove+--pick=배타 통과+dry 무변경"); fails += 0 if ok else 1
+        # 9. 반대 flavor에 설치된 조각 → 안내 후 no-op
+        t7 = Path(d) / "r7"
+        run([sys.executable, str(STORE), "--target", str(t7), "--pick", "karpathy", "--yes"])
+        before = (t7 / "CLAUDE.md").read_text(encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(t7),
+                 "--remove", "karpathy", "--flavor", "codex", "--yes"])
+        ok = (r.returncode == 0 and "--flavor claude" in r.stdout
+              and (t7 / "CLAUDE.md").read_text(encoding="utf-8") == before)
+        print(f"  {'PASS' if ok else 'FAIL'} 타 flavor 설치분=안내 no-op"); fails += 0 if ok else 1
+        # 10. 카탈로그에 없는 옛 조각도 반품 가능
+        t8 = Path(d) / "r8"; t8.mkdir(parents=True)
+        (t8 / "CLAUDE.md").write_text(
+            "# my\n\n<!-- store:oldfrag:start -->\n옛 조각\n<!-- store:oldfrag:end -->\n", encoding="utf-8")
+        r = run([sys.executable, str(STORE), "--target", str(t8), "--remove", "oldfrag", "--yes"])
+        text = (t8 / "CLAUDE.md").read_text(encoding="utf-8")
+        ok = r.returncode == 0 and "oldfrag" not in text and "# my" in text
+        print(f"  {'PASS' if ok else 'FAIL'} 카탈로그 무등재 옛 조각 반품"); fails += 0 if ok else 1
+        # 11. 존재하지 않는 이름 반품 = exit 2 무변경
+        r = run([sys.executable, str(STORE), "--target", str(t8), "--remove", "no-such", "--yes"])
+        ok = r.returncode == 2 and (t8 / "CLAUDE.md").read_text(encoding="utf-8") == text
+        print(f"  {'PASS' if ok else 'FAIL'} 무존재 반품=exit 2 무변경"); fails += 0 if ok else 1
+    return fails
+
+
 def doctor_checks() -> int:
     fails = 0
     with tempfile.TemporaryDirectory() as d:
@@ -511,6 +603,7 @@ def main() -> None:
     fails += multiagent_safety_checks()
     fails += flavor_checks()
     fails += codex_guard_checks()
+    fails += remove_checks()
     fails += doctor_checks()
     print("전부 PASS" if fails == 0 else f"{fails}개 FAIL")
     sys.exit(1 if fails else 0)

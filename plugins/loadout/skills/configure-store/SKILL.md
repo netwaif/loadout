@@ -1,6 +1,6 @@
 ---
 name: configure-store
-description: Use when the user wants to pick-and-install CLAUDE.md/AGENTS.md 구성 조각(카파시 4원칙, Fable5 단독, 멀티에이전트, 에이전트 루프 등) for a folder, or to diagnose an installed folder. Triggers on "CLAUDE.md 구성 백화점", "loadout 설치", "구성 골라 담아줘", "카파시 4원칙만 설치", "이 폴더에 에이전트 루프 구성 넣어줘", "Fable5 단독 구성 설치", "codex에 설치", "AGENTS.md에 설치", "loadout doctor", "구성 점검해줘". Composable fragments with corner-based exclusion, installed by a deterministic marker-append installer; read-only doctor included.
+description: Use when the user wants to pick-and-install CLAUDE.md/AGENTS.md 구성 조각(카파시 4원칙, Fable5 단독, 멀티에이전트, 에이전트 루프 등) for a folder, to remove installed fragments, or to diagnose an installed folder. Triggers on "CLAUDE.md 구성 백화점", "loadout 설치", "구성 골라 담아줘", "카파시 4원칙만 설치", "이 폴더에 에이전트 루프 구성 넣어줘", "Fable5 단독 구성 설치", "codex에 설치", "AGENTS.md에 설치", "구성 빼줘", "조각 반품", "loadout 제거", "멀티로 갈아타줘", "loadout doctor", "구성 점검해줘". Composable fragments with corner-based exclusion, installed by a deterministic marker-append installer; deterministic removal and read-only doctor included.
 ---
 
 # CLAUDE.md 구성 백화점 (loadout / configure-store)
@@ -20,6 +20,21 @@ description: Use when the user wants to pick-and-install CLAUDE.md/AGENTS.md 구
 5. **결과 보고** — 배타 위반(exit 2)이면 위반 내용을 그대로 전달한다. "완료"는 exit 0일 때만.
 6. **멀티에이전트 포함 시** — multi-agent-starter 플러그인이 설치돼 있어야 한다(store가 그 init.py에 flavor 그대로 위임). 못 찾으면 설치 안내 후 중단. knot·요금가드도 카탈로그에서 담을 수 있다. knot 능동 스킬은 netwaif/knot 플러그인이 제공.
 7. **요금가드 × codex flavor** — 조각 설치와 함께 동봉 워처(`files.codex/` → 대상 `_shared/guard/`)가 자동 복사된다. loadout 단독으로 완결(starter 불필요). 이후 3단계 실행법은 조각 본문·`_shared/guard/README.md` 참조.
+
+## 반품 (remove)
+
+"구성 빼줘", "조각 반품", "멀티로 갈아타줘"(코너 스왑) 요청 시:
+
+```bash
+python3 "<이 스킬 폴더>/generator/store.py" --target "<대상폴더>" --remove <품목1,품목2> [--pick <품목>] [--flavor codex] --yes
+```
+
+- `--pick`과 병용하면 **제거를 먼저** 실행한다 — 같은 코너 갈아타기(예: `--remove fable5-solo --pick multiagent`)가 한 호출로 끝난다.
+- 마커 블록을 제거하고, 딸린 파일은 **정본과 바이트 일치할 때만** 삭제한다(사용자가 수정한 파일은 보존하고 안내). 사용자 데이터(SESSION.md 등)는 건드리지 않는다.
+- guard(claude)는 `.claude/settings.json`의 coach --hook Stop 훅도 함께 제거된다(사용자 훅 보존).
+- **multiagent는 반품 미지원**(exit 2) — tasks/ 등 사용자 작업물이 얽혀 있어 수동 정리를 안내한다.
+- 미설치 품목 반품은 안내 후 no-op(멱등). 카탈로그에서 빠진 옛 조각도 설치돼 있으면 반품 가능.
+- 반품도 손으로 하지 말 것 — 마커 짝을 깨뜨리기 쉽다. 반드시 `--remove`로.
 
 ## 진단 (doctor)
 

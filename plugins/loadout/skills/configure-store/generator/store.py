@@ -12,6 +12,8 @@
     python3 store.py --list
     python3 store.py --target ~/work/my-folder --pick karpathy,fable5-solo --yes
     python3 store.py --target ~/work/my-folder --pick guard --flavor codex --yes
+    python3 store.py --target ~/work/my-folder --remove karpathy --yes
+    python3 store.py --target ~/work/my-folder --remove fable5-solo --pick multiagent --yes  # 코너 스왑
     python3 store.py --target ~/work/my-folder --doctor
 """
 from __future__ import annotations
@@ -170,6 +172,99 @@ def install_fragment(target: Path, name: str, dry: bool) -> str:
         msg = merge_claude_settings_hook(target, frag_dir / hook_rel, dry)
         extra += f" (+{msg})"
     return f"{name} {action} → {INSTRUCTION_FILE}{extra}"
+
+
+def prune_empty_dirs(d: Path, stop: Path) -> None:
+    """삭제로 비게 된 폴더를 stop(미포함) 직전까지 정리 — 빈 폴더만, stop 바깥은 안 건드림."""
+    while d != stop and stop in d.parents and d.is_dir() and not any(d.iterdir()):
+        d.rmdir()
+        d = d.parent
+
+
+def unmerge_claude_settings_hook(target: Path, dry: bool) -> str | None:
+    """merge_claude_settings_hook의 역방향 — hooks.Stop에서 마커(coach --hook) 항목만 제거.
+    사용자 훅 보존. 제거로 빈 구조는 정리, settings.json이 통째로 비면 파일 삭제."""
+    dest = target / ".claude" / "settings.json"
+    if not dest.is_file():
+        return None
+    try:
+        data = json.loads(dest.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    hooks = data.get("hooks") if isinstance(data, dict) else None
+    stop = hooks.get("Stop") if isinstance(hooks, dict) else None
+    if not isinstance(stop, list):
+        return None
+    kept = [e for e in stop if GUARD_HOOK_MARKER not in json.dumps(e, ensure_ascii=False)]
+    if len(kept) == len(stop):
+        return None
+    if kept:
+        hooks["Stop"] = kept
+    else:
+        del hooks["Stop"]
+        if not hooks:
+            del data["hooks"]
+    if not dry:
+        if data:
+            dest.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        else:
+            dest.unlink()
+            prune_empty_dirs(dest.parent, target)
+    return "Stop 훅 제거 → .claude/settings.json"
+
+
+def remove_fragment(target: Path, name: str, dry: bool) -> str:
+    """조각 반품 — 마커 블록 제거 + 딸린 파일은 정본 바이트 일치 시만 삭제(수정본 보존).
+    미설치·타 flavor·멀티 내장분은 안내 후 no-op(멱등)."""
+    instr = target / INSTRUCTION_FILE
+    start, end = marker(name)
+    text = instr.read_text(encoding="utf-8") if instr.is_file() else ""
+    if not (start in text and end in text):
+        other_fl, other_fname = next((fl, f) for fl, f in FLAVOR_FILES.items() if f != INSTRUCTION_FILE)
+        other_path = target / other_fname
+        if other_path.is_file() and start in other_path.read_text(encoding="utf-8"):
+            return f"{name}: {other_fname}에 설치돼 있음 — --flavor {other_fl}로 반품하세요 (건너뜀)"
+        if name == "karpathy" and multiagent_installed(target):
+            return f"{name}: 멀티에이전트 템플릿 내장분(마커 블록 없음) — 반품 대상 아님 (건너뜀)"
+        return f"{name}: 설치돼 있지 않음 (건너뜀)"
+    new = re.sub(re.escape(start) + r".*?" + re.escape(end), "", text, count=1, flags=re.S)
+    new = re.sub(r"\n{3,}", "\n\n", new).lstrip("\n")
+    new = new.rstrip("\n") + "\n" if new.strip() else ""
+    notes: list[str] = []
+    if not new:
+        notes.append(f"{INSTRUCTION_FILE} 비어 파일 삭제")
+    if not dry:
+        if new:
+            instr.write_text(new, encoding="utf-8")
+        else:
+            instr.unlink()
+    frag_dir = FRAGMENTS_DIR / name
+    removed = 0
+    if frag_dir.is_dir():
+        for files_dir in fragment_files_dirs(frag_dir):
+            for src in sorted(files_dir.rglob("*")):
+                if src.is_dir():
+                    continue
+                dest = target / src.relative_to(files_dir)
+                if not dest.is_file():
+                    continue
+                if dest.read_bytes() == src.read_bytes():
+                    if not dry:
+                        dest.unlink()
+                        prune_empty_dirs(dest.parent, target)
+                    removed += 1
+                else:
+                    notes.append(f"{dest.relative_to(target)} 수정돼 있어 보존")
+        meta_path = frag_dir / "meta.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else {}
+        if meta.get("claude_settings_hook") and FLAVOR == "claude":
+            msg = unmerge_claude_settings_hook(target, dry)
+            if msg:
+                notes.append(msg)
+    if removed:
+        notes.insert(0, f"딸린 파일 {removed}개 삭제")
+    extra = f" ({', '.join(notes)})" if notes else ""
+    return f"{name} 반품 → {INSTRUCTION_FILE}{extra}"
 
 
 def find_multiagent_init() -> Path | None:
@@ -373,6 +468,7 @@ def main() -> None:
     ap.add_argument("--list", action="store_true", help="카탈로그 출력")
     ap.add_argument("--target", help="설치 대상 폴더")
     ap.add_argument("--pick", help="설치할 품목(쉼표 구분, 예: karpathy,agent-loop)")
+    ap.add_argument("--remove", help="반품할 품목(쉼표 구분) — --pick과 병용 시 제거를 먼저 실행(코너 스왑)")
     ap.add_argument("--flavor", choices=sorted(FLAVOR_FILES), default="claude",
                     help="대상 하네스: claude=CLAUDE.md(기본) | codex=AGENTS.md")
     ap.add_argument("--doctor", action="store_true", help="설치 상태 진단(읽기 전용, 수정 없음)")
@@ -393,11 +489,32 @@ def main() -> None:
             sys.exit("[error] --doctor에는 --target이 필요합니다")
         sys.exit(doctor(Path(args.target).expanduser().resolve(), catalog))
 
-    if args.list or not (args.target and args.pick):
+    if args.list or not (args.target and (args.pick or args.remove)):
         print_catalog(catalog)
         return
 
-    picks = [p.strip() for p in args.pick.split(",") if p.strip()]
+    target = Path(args.target).expanduser().resolve()
+    if target == SCRIPT_DIR or SCRIPT_DIR in target.parents or target in SCRIPT_DIR.parents:
+        sys.exit(f"[error] installer 트리 안에는 설치할 수 없습니다: {target}")
+
+    installed = installed_names(target)
+
+    removes = [p.strip() for p in (args.remove or "").split(",") if p.strip()]
+    removes = list(dict.fromkeys(removes))
+    scaffold_rm = [r for r in removes if r in catalog and catalog[r].get("scaffold")]
+    if scaffold_rm:
+        for r in scaffold_rm:
+            print(f"[안내] {catalog[r]['label']}: 스캐폴드형 품목은 반품을 지원하지 않습니다 — "
+                  f"tasks/ 등에 사용자 작업물이 쌓이는 구조라 자동 제거가 위험합니다. "
+                  f"보존할 작업물을 옮긴 뒤 {INSTRUCTION_FILE}·_shared/ 등을 수동으로 정리하세요.")
+        sys.exit(2)
+    # 반품 대상 검증은 카탈로그 ∪ 실제 설치 마커 — 카탈로그에서 빠진 옛 조각도 반품 가능해야 함
+    unknown_rm = [r for r in removes if r not in catalog and r not in installed]
+    if unknown_rm:
+        print(f"[error] 없는 품목(카탈로그·설치 모두 없음): {', '.join(unknown_rm)}")
+        sys.exit(2)
+
+    picks = [p.strip() for p in (args.pick or "").split(",") if p.strip()]
     picks = list(dict.fromkeys(picks))  # 중복 pick 제거(순서 보존) — 같은 품목 2회가 배타 거부되지 않게
     unknown = [p for p in picks if p not in catalog]
     if unknown:
@@ -415,31 +532,36 @@ def main() -> None:
                   f"{FLAVOR} flavor에는 설치할 수 없습니다. ({catalog[p]['note']})")
         sys.exit(2)
 
-    target = Path(args.target).expanduser().resolve()
-    if target == SCRIPT_DIR or SCRIPT_DIR in target.parents or target in SCRIPT_DIR.parents:
-        sys.exit(f"[error] installer 트리 안에는 설치할 수 없습니다: {target}")
-
-    installed = installed_names(target)
+    # 배타 검사는 반품 반영 후 상태 기준 — 현재 flavor 파일에서 실제로 빠질 마커만 차감
+    instr = target / INSTRUCTION_FILE
+    current_names = set(re.findall(r"<!-- store:([a-z0-9-]+):start -->",
+                                   instr.read_text(encoding="utf-8"))) if instr.is_file() else set()
+    installed_after = installed - (set(removes) & current_names)
     if multiagent_installed(target):
-        installed |= {"multiagent"}
-    problems = check_exclusions(picks, installed, catalog)
+        installed_after |= {"multiagent"}
+    problems = check_exclusions(picks, installed_after, catalog)
     if problems:
         print("[배타 위반] 설치를 거부합니다 — 대상 파일은 변경되지 않았습니다:")
         for msg in problems:
             print(f"  · {msg}")
         sys.exit(2)
 
-    if "karpathy" in picks and ("multiagent" in picks or "multiagent" in installed):
+    if "karpathy" in picks and ("multiagent" in picks or "multiagent" in installed_after):
         print("  [안내] 멀티에이전트 템플릿에는 카파시 4원칙이 이미 내장 — karpathy 설치를 생략합니다.")
         picks = [p for p in picks if p != "karpathy"]
 
     print(f"  target : {target}")
-    print(f"  담은 품목: {', '.join(flavor_label(catalog[p]) for p in picks)}")
+    if removes:
+        print(f"  반품 품목: {', '.join(flavor_label(catalog[r]) if r in catalog else r for r in removes)}")
+    if picks:
+        print(f"  담은 품목: {', '.join(flavor_label(catalog[p]) for p in picks)}")
     if not args.yes and not args.dry_run:
         if input("\n진행할까요? [y/N]: ").strip().lower() not in ("y", "yes"):
             sys.exit("취소됨")
 
     prefix = "(dry) " if args.dry_run else ""
+    for r in removes:
+        print(f"  {prefix}{remove_fragment(target, r, dry=args.dry_run)}")
     ordered = sorted(picks, key=lambda p: 0 if catalog[p].get("scaffold") else 1)
     for p in ordered:
         if catalog[p].get("scaffold"):

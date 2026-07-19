@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.5.0] - 2026-07-19
+### Added
+- **반품(`--remove`)**: 설치의 역방향 CLI. 마커 블록을 결정적으로 제거하고, 딸린 파일은 정본과 바이트 일치할 때만 삭제(사용자 수정본은 보존+안내), 제거로 빈 파일·폴더는 원상복구. `--pick` 병용 시 제거를 먼저 실행해 같은 코너 스왑(예: `--remove fable5-solo --pick multiagent`)이 한 호출로 끝난다 — 배타 검사는 제거 반영 후 상태 기준. guard(claude)는 `.claude/settings.json`의 coach --hook Stop 훅도 함께 제거(사용자 훅 보존). multiagent(스캐폴드형)는 반품 미지원(exit 2, 수동 절차 안내). 미설치 반품=no-op(멱등), 카탈로그에서 빠진 옛 조각도 반품 가능. 테스트 11케이스·SKILL 반품 절차·README 추가. 설계 스펙: docs/superpowers/specs/2026-07-19-loadout-remove-design.md
+
 ## [0.4.7] - 2026-07-19
 ### Added
 - 신규 품목 입점: **예스맨 금지 (no-yesman)** — 코너 "소통 태도" 신설. 반사적 동의 금지: 답하기 전에 약점·반례·놓친 전제부터 뒤지고, 문제면 완충 문구 없이 정면 반박, 동의는 검증을 통과했을 때만 근거를 붙여서. 조건부 문단으로 카파시 ①(가정 표면화)의 "Push back when warranted"와 연결. README 품목 표·marketplace 설명 열거 9종으로 갱신. (2026-07-19 video2 촬영 중 플러그인 캐시에 직접 입점된 조각을 repo로 이식)

@@ -31,6 +31,18 @@ python3 plugins/loadout/skills/configure-store/generator/store.py \
   --target <폴더> --pick karpathy,agent-loop --yes          # Codex 폴더면 --flavor codex 추가
 ```
 
+## 반품 (remove)
+
+설치의 역방향 — 마커 블록 제거 + 딸린 파일은 정본 바이트 일치 시만 삭제(수정본 보존).
+`--pick` 병용 시 제거를 먼저 실행해 같은 코너 갈아타기가 한 호출로 끝난다.
+
+```bash
+python3 plugins/loadout/skills/configure-store/generator/store.py \
+  --target <폴더> --remove fable5-solo --pick multiagent --yes   # 코너 스왑
+```
+
+multiagent는 반품 미지원(사용자 작업물이 얽힌 스캐폴드 — 수동 정리 안내).
+
 ## 진단 (doctor)
 
 설치 상태를 읽기 전용으로 점검한다 — 아무것도 고치지 않는다.
