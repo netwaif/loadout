@@ -14,6 +14,7 @@ Claude Code(CLAUDE.md)와 Codex CLI(AGENTS.md, `--flavor codex`) 둘 다 지원.
 | knot 지식 vault | 지식 관리 | 자동층 조각(능동 스킬=multi-agent-starter) |
 | goal 요금가드 | 비용 통제 | claude=Stop 훅 / codex=워처 복사(coach 필요) |
 | 세션 이어가기 | 세션 연속성 | SESSION.md 체크포인트·재정박 |
+| 예스맨 금지 | 소통 태도 | 반사적 동의 금지 — 검증 후에만 근거 붙여 동의 |
 | 저비용 Fable 5 · GPT 5.6 | 모델 운용 | Effort 상한·역할 분리·기획 선행 / codex 카탈로그명="저비용 GPT 5.6" |
 
 **규칙**: 같은 코너 = 상호배타, 코너가 다르면 조합 자유. 조합 품목은 없다 — 조각 안 `[X도 설치된 경우]` 조건부 문단이 조합을 처리한다.

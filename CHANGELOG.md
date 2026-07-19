@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.7] - 2026-07-19
+### Added
+- 신규 품목 입점: **예스맨 금지 (no-yesman)** — 코너 "소통 태도" 신설. 반사적 동의 금지: 답하기 전에 약점·반례·놓친 전제부터 뒤지고, 문제면 완충 문구 없이 정면 반박, 동의는 검증을 통과했을 때만 근거를 붙여서. 조건부 문단으로 카파시 ①(가정 표면화)의 "Push back when warranted"와 연결. README 품목 표·marketplace 설명 열거 9종으로 갱신. (2026-07-19 video2 촬영 중 플러그인 캐시에 직접 입점된 조각을 repo로 이식)
+
 ## [0.4.6] - 2026-07-10
 ### Fixed
 - 문서의 codex 반영 누락 정리(docs only, 동작 변경 없음): README 품목 표에 Fable5 단독=claude 전용·저비용 Fable 5=codex "저비용 GPT 5.6" 번안 비고 추가, 입점 양식(_TEMPLATE/README.md)에 `label_codex` 규약 문서화, marketplace.json 상위 description 품목 열거를 현행 8종으로 갱신.

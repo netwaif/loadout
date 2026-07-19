@@ -55,12 +55,12 @@ def catalog_checks() -> int:
     metas = {p.parent.name: json.loads(p.read_text(encoding="utf-8"))
              for p in FRAGMENTS.glob("*/meta.json") if not p.parent.name.startswith("_")}
     all_items = {"karpathy", "fable5-solo", "fable5-lowcost", "multiagent",
-                 "agent-loop", "knot", "guard", "session-handoff"}
+                 "agent-loop", "knot", "guard", "session-handoff", "no-yesman"}
     ok = set(metas) == all_items
-    print(f"  {'PASS' if ok else 'FAIL'} 카탈로그 8품목"); fails += 0 if ok else 1
+    print(f"  {'PASS' if ok else 'FAIL'} 카탈로그 9품목"); fails += 0 if ok else 1
     avail = {n for n, m in metas.items() if m.get("available")}
     ok = avail == all_items
-    print(f"  {'PASS' if ok else 'FAIL'} available 8품목(전 품목 구매 가능)"); fails += 0 if ok else 1
+    print(f"  {'PASS' if ok else 'FAIL'} available 9품목(전 품목 구매 가능)"); fails += 0 if ok else 1
     corners = {m["corner"] for m in metas.values()}
     ok = {"행동 규율", "실행 구조", "자율성"} <= corners
     print(f"  {'PASS' if ok else 'FAIL'} 코너 3종 존재"); fails += 0 if ok else 1
